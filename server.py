@@ -202,7 +202,7 @@ Analyze the attached SWMS document thoroughly and provide the assessment in the 
         
         # Generate analysis using Gemini model
         response = client.models.generate_content(
-            model='gemini-2.0-flash-exp',
+            model='gemini-2.5-flash',
             contents=[
                 assessment_prompt,
                 types.Part.from_uri(
