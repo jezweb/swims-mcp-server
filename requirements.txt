@@ -2,3 +2,5 @@ fastmcp>=2.11.3
 google-genai
 python-dotenv
 requests
+python-docx
+reportlab

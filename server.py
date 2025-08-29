@@ -3,6 +3,7 @@ SWMS MCP Server - Safe Work Method Statement Analysis
 """
 
 import os
+import io
 import json
 import base64
 import tempfile
@@ -13,6 +14,19 @@ from fastmcp import FastMCP
 from dotenv import load_dotenv
 from google import genai
 from google.genai import types
+
+# Import libraries for DOCX to PDF conversion
+try:
+    from docx import Document
+    from reportlab.lib.pagesizes import letter
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, PageBreak
+    from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+    from reportlab.lib.units import inch
+    from reportlab.lib import colors
+    from reportlab.lib.enums import TA_LEFT, TA_CENTER, TA_RIGHT
+    DOCX_CONVERSION_AVAILABLE = True
+except ImportError:
+    DOCX_CONVERSION_AVAILABLE = False
 
 # Load environment variables
 load_dotenv()
@@ -25,6 +39,103 @@ if api_key:
 
 # MUST be at module level for FastMCP Cloud
 mcp = FastMCP("swms-analysis-server")
+
+def convert_docx_to_pdf(docx_bytes: bytes) -> bytes:
+    """
+    Convert DOCX bytes to PDF bytes using python-docx and reportlab.
+    This is a simplified conversion that preserves text and basic formatting.
+    """
+    if not DOCX_CONVERSION_AVAILABLE:
+        raise ImportError("DOCX conversion libraries not available")
+    
+    # Read DOCX document
+    doc = Document(io.BytesIO(docx_bytes))
+    
+    # Create PDF in memory
+    pdf_buffer = io.BytesIO()
+    pdf = SimpleDocTemplate(pdf_buffer, pagesize=letter,
+                           rightMargin=72, leftMargin=72,
+                           topMargin=72, bottomMargin=18)
+    
+    # Container for the 'Flowable' objects
+    story = []
+    styles = getSampleStyleSheet()
+    
+    # Create custom styles for better formatting
+    heading_style = ParagraphStyle(
+        'CustomHeading',
+        parent=styles['Heading1'],
+        fontSize=14,
+        textColor=colors.HexColor('#1a1a1a'),
+        spaceAfter=12,
+        fontName='Helvetica-Bold'
+    )
+    
+    normal_style = ParagraphStyle(
+        'CustomNormal',
+        parent=styles['Normal'],
+        fontSize=10,
+        textColor=colors.HexColor('#333333'),
+        spaceAfter=6,
+        fontName='Helvetica'
+    )
+    
+    # Process paragraphs
+    for para in doc.paragraphs:
+        text = para.text.strip()
+        if not text:
+            continue
+            
+        # Clean text for reportlab (escape special characters)
+        text = text.replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+        
+        # Detect headings based on style or formatting
+        if para.style and 'Heading' in para.style.name:
+            story.append(Paragraph(text, heading_style))
+        elif para.runs and para.runs[0].bold:
+            story.append(Paragraph(text, heading_style))
+        else:
+            story.append(Paragraph(text, normal_style))
+        
+        story.append(Spacer(1, 6))
+    
+    # Process tables if any
+    for table in doc.tables:
+        data = []
+        for row in table.rows:
+            row_data = []
+            for cell in row.cells:
+                # Clean cell text
+                cell_text = cell.text.strip().replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+                row_data.append(cell_text)
+            data.append(row_data)
+        
+        if data:
+            # Create table with basic styling
+            t = Table(data)
+            t.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+                ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                ('FONTSIZE', (0, 0), (-1, 0), 10),
+                ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+                ('BACKGROUND', (0, 1), (-1, -1), colors.beige),
+                ('GRID', (0, 0), (-1, -1), 1, colors.black),
+                ('FONTNAME', (0, 1), (-1, -1), 'Helvetica'),
+                ('FONTSIZE', (0, 1), (-1, -1), 9),
+            ]))
+            story.append(t)
+            story.append(Spacer(1, 12))
+    
+    # Build PDF
+    pdf.build(story)
+    
+    # Get PDF bytes
+    pdf_bytes = pdf_buffer.getvalue()
+    pdf_buffer.close()
+    
+    return pdf_bytes
 
 @mcp.tool()
 async def upload_swms_document(
@@ -60,6 +171,9 @@ async def upload_swms_document(
             }
         
         # Auto-detect MIME type if not provided
+        converted_from_docx = False
+        original_file_name = file_name
+        
         if not mime_type:
             extension = Path(file_name).suffix.lower()
             if extension == '.pdf':
@@ -72,8 +186,30 @@ async def upload_swms_document(
                     "message": f"Unsupported file format: {extension}. Only PDF and DOCX are supported."
                 }
         
+        # Convert DOCX to PDF if needed
+        if mime_type == 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' or \
+           file_name.lower().endswith('.docx'):
+            if DOCX_CONVERSION_AVAILABLE:
+                try:
+                    # Convert DOCX to PDF
+                    file_bytes = convert_docx_to_pdf(file_bytes)
+                    # Update file name and mime type
+                    file_name = Path(file_name).stem + '.pdf'
+                    mime_type = 'application/pdf'
+                    converted_from_docx = True
+                except Exception as e:
+                    return {
+                        "status": "error",
+                        "message": f"Failed to convert DOCX to PDF: {str(e)}"
+                    }
+            else:
+                return {
+                    "status": "error",
+                    "message": "DOCX files require conversion to PDF, but conversion libraries are not available"
+                }
+        
         # Create temporary file for upload
-        with tempfile.NamedTemporaryFile(suffix=Path(file_name).suffix, delete=False) as temp_file:
+        with tempfile.NamedTemporaryFile(suffix='.pdf' if converted_from_docx else Path(file_name).suffix, delete=False) as temp_file:
             temp_file.write(file_bytes)
             temp_path = temp_file.name
         
@@ -87,7 +223,7 @@ async def upload_swms_document(
                 )
             )
             
-            return {
+            response = {
                 "status": "success",
                 "message": f"Document {file_name} uploaded successfully",
                 "document_id": uploaded_file.name,
@@ -98,6 +234,16 @@ async def upload_swms_document(
                     "size_bytes": len(file_bytes)
                 }
             }
+            
+            if converted_from_docx:
+                response["conversion_info"] = {
+                    "original_format": "DOCX",
+                    "original_name": original_file_name,
+                    "converted_to": "PDF",
+                    "note": "Document was automatically converted from DOCX to PDF for Gemini compatibility"
+                }
+            
+            return response
         finally:
             # Clean up temporary file
             os.unlink(temp_path)
@@ -141,6 +287,10 @@ async def upload_swms_from_url(url: str) -> Dict[str, Any]:
         if not file_name or '.' not in file_name:
             file_name = "document.pdf"  # Default name
         
+        converted_from_docx = False
+        original_file_name = file_name
+        file_bytes = response.content
+        
         content_type = response.headers.get('content-type', '')
         if 'pdf' in content_type:
             mime_type = 'application/pdf'
@@ -163,9 +313,30 @@ async def upload_swms_from_url(url: str) -> Dict[str, Any]:
                     "message": f"Could not determine file type from URL. Ensure it's a PDF or DOCX file."
                 }
         
+        # Convert DOCX to PDF if needed
+        if mime_type == 'application/vnd.openxmlformats-officedocument.wordprocessingml.document':
+            if DOCX_CONVERSION_AVAILABLE:
+                try:
+                    # Convert DOCX to PDF
+                    file_bytes = convert_docx_to_pdf(file_bytes)
+                    # Update file name and mime type
+                    file_name = Path(file_name).stem + '.pdf'
+                    mime_type = 'application/pdf'
+                    converted_from_docx = True
+                except Exception as e:
+                    return {
+                        "status": "error",
+                        "message": f"Failed to convert DOCX to PDF: {str(e)}"
+                    }
+            else:
+                return {
+                    "status": "error",
+                    "message": "DOCX files require conversion to PDF, but conversion libraries are not available"
+                }
+        
         # Create temporary file for upload
-        with tempfile.NamedTemporaryFile(suffix=Path(file_name).suffix, delete=False) as temp_file:
-            temp_file.write(response.content)
+        with tempfile.NamedTemporaryFile(suffix='.pdf' if converted_from_docx else Path(file_name).suffix, delete=False) as temp_file:
+            temp_file.write(file_bytes)
             temp_path = temp_file.name
         
         try:
@@ -178,7 +349,7 @@ async def upload_swms_from_url(url: str) -> Dict[str, Any]:
                 )
             )
             
-            return {
+            response_data = {
                 "status": "success",
                 "message": f"Document {file_name} uploaded successfully from URL",
                 "document_id": uploaded_file.name,
@@ -186,10 +357,20 @@ async def upload_swms_from_url(url: str) -> Dict[str, Any]:
                     "name": uploaded_file.display_name,
                     "mime_type": uploaded_file.mime_type,
                     "uri": uploaded_file.uri,
-                    "size_bytes": len(response.content),
+                    "size_bytes": len(file_bytes),
                     "source_url": url
                 }
             }
+            
+            if converted_from_docx:
+                response_data["conversion_info"] = {
+                    "original_format": "DOCX",
+                    "original_name": original_file_name,
+                    "converted_to": "PDF",
+                    "note": "Document was automatically converted from DOCX to PDF for Gemini compatibility"
+                }
+            
+            return response_data
         finally:
             # Clean up temporary file
             os.unlink(temp_path)
