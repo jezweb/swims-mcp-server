@@ -80,7 +80,7 @@ async def upload_swms_document(
         try:
             # Upload file to Gemini
             uploaded_file = client.files.upload(
-                path=temp_path,
+                file=temp_path,
                 config=types.UploadFileConfig(
                     display_name=file_name,
                     mime_type=mime_type
@@ -171,7 +171,7 @@ async def upload_swms_from_url(url: str) -> Dict[str, Any]:
         try:
             # Upload file to Gemini
             uploaded_file = client.files.upload(
-                path=temp_path,
+                file=temp_path,
                 config=types.UploadFileConfig(
                     display_name=file_name,
                     mime_type=mime_type
