@@ -71,17 +71,36 @@ The prompt is comprehensive and covers:
 
 ## Enhancement Implementation Plan (2024-12-30)
 
-### Priority Features to Implement
+### Completed Features ✅
 1. **Custom Analysis Tool** - Flexible analysis with user-provided prompts
 2. **Compliance Scoring System** - Numerical scores for tracking
 3. **Quick Check Tool** - Fast checks for specific aspects
-4. **Generate Improvements** - AI-generated text to fix issues
 
-### Implementation Progress
-- [x] Custom Analysis Tool - ✅ Implemented `analyze_swms_custom()` with flexible prompts
-- [x] Compliance Scoring System - ✅ Implemented `get_compliance_score()` with weighted scoring
-- [x] Quick Check Tool - ✅ Implemented `quick_check_swms()` for specific aspect checks
-- [ ] Generate Improvements Tool
+### R2 + Gemini Context Implementation (2025-01-01)
+
+#### Architecture Design
+- **Storage**: Cloudflare R2 bucket for regulatory PDFs
+- **Processing**: Gemini Files API for document context
+- **Caching**: File ID caching to avoid re-uploads
+- **Structure**: Organized by jurisdiction (national, nsw, vic, qld, etc.)
+
+#### Implementation Plan
+1. **R2 Integration** - Fetch regulatory documents from R2 bucket
+2. **Document Management** - Upload and cache files with Gemini API
+3. **Context Injection** - Include relevant docs in analysis based on jurisdiction
+4. **Jurisdiction Support** - Add state/territory parameter to analysis tools
+
+#### Document Sources
+- Safe Work Australia SWMS information sheets
+- State-specific WHS/OHS regulations
+- Model Codes of Practice
+- State regulator templates and guides
+
+#### Implementation Progress
+- [x] R2 document fetching module - ✅ Created `r2_context.py` with R2ContextManager
+- [x] Gemini file caching system - ✅ Implemented file ID caching with 24hr expiry
+- [x] Jurisdiction-aware analysis - ✅ Added jurisdiction parameter to all analysis functions
+- [x] Context injection in prompts - ✅ Regulatory docs included in Gemini context
 
 ### Design Principles
 - Keep it simple - no over-engineering

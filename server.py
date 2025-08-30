@@ -15,6 +15,9 @@ from dotenv import load_dotenv
 from google import genai
 from google.genai import types
 
+# Import R2 context manager
+from r2_context import R2ContextManager
+
 # Import libraries for DOCX to PDF conversion
 try:
     from docx import Document
@@ -34,8 +37,10 @@ load_dotenv()
 # Configure Gemini API client
 api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
 client = None
+r2_context = None
 if api_key:
     client = genai.Client(api_key=api_key)
+    r2_context = R2ContextManager(client)
 
 # MUST be at module level for FastMCP Cloud
 mcp = FastMCP("swms-analysis-server")
@@ -382,12 +387,16 @@ async def upload_swms_from_url(url: str) -> Dict[str, Any]:
         }
 
 @mcp.tool()
-async def analyze_swms_compliance(document_id: str) -> Dict[str, Any]:
+async def analyze_swms_compliance(
+    document_id: str,
+    jurisdiction: Optional[str] = "nsw"
+) -> Dict[str, Any]:
     """
-    Analyze a SWMS document for NSW WHS compliance using Gemini API.
+    Analyze a SWMS document for WHS compliance using Gemini API.
     
     Args:
         document_id: ID of the uploaded SWMS document
+        jurisdiction: State/territory jurisdiction (nsw, vic, qld, wa, sa, tas, act, nt, national)
         
     Returns:
         Detailed compliance assessment report
@@ -408,15 +417,39 @@ async def analyze_swms_compliance(document_id: str) -> Dict[str, Any]:
                 "message": f"Document not found: {document_id}"
             }
         
-        # NSW SWMS Assessment Prompt
-        assessment_prompt = """
-## System Prompt for Assessing Safe Work Method Statements (SWMS) in NSW Construction
+        # Get jurisdiction-specific context if R2 context manager is available
+        context_files = []
+        jurisdiction_info = {}
+        if r2_context and jurisdiction:
+            try:
+                # Get regulatory document file IDs from R2
+                context_files = r2_context.get_context_files(jurisdiction)
+                # Get jurisdiction-specific information
+                jurisdiction_info = r2_context.get_jurisdiction_context(jurisdiction)
+            except Exception as e:
+                print(f"Warning: Could not load R2 context: {e}")
+        
+        # Build jurisdiction-aware prompt
+        jurisdiction_upper = jurisdiction.upper() if jurisdiction else "NSW"
+        legislation = jurisdiction_info.get("legislation", "Work Health and Safety Regulation 2017")
+        regulator = jurisdiction_info.get("regulatory_body", "SafeWork NSW")
+        
+        # Adjust terminology for Victoria
+        terminology = "WHS" if jurisdiction != "vic" else "OHS"
+        
+        # SWMS Assessment Prompt with jurisdiction awareness
+        assessment_prompt = f"""
+## System Prompt for Assessing Safe Work Method Statements (SWMS) in {jurisdiction_upper} Construction
 
-**Objective:** Analyze the provided Safe Work Method Statement (SWMS) for completeness and compliance with NSW Work Health and Safety (WHS) Regulation 2017. Generate a detailed compliance report.
+**Objective:** Analyze the provided Safe Work Method Statement (SWMS) for completeness and compliance with {legislation}. Generate a detailed compliance report.
+
+**Jurisdiction:** {jurisdiction_upper}
+**Regulatory Body:** {regulator}
+**Legislation Framework:** {legislation}
 
 **Instructions:**
 
-You are an AI assistant with expertise in NSW Work Health and Safety (WHS) legislation for the construction industry. Assess the SWMS document according to these key areas:
+You are an AI assistant with expertise in {jurisdiction_upper} Work Health and Safety ({terminology}) legislation for the construction industry. Assess the SWMS document according to these key areas:
 
 **1. Document Control and Administrative Compliance:**
 - Project details (name, address, Principal Contractor, subcontractor, ABN)
@@ -498,16 +531,35 @@ Return a JSON object with this exact structure:
 Analyze the attached SWMS document thoroughly and provide the assessment in the exact JSON format above.
 """
         
+        # Build contents list with prompt and document
+        contents = [assessment_prompt]
+        
+        # Add context files if available
+        if context_files:
+            for file_id in context_files:
+                try:
+                    context_file = client.files.get(name=file_id)
+                    contents.append(
+                        types.Part.from_uri(
+                            file_uri=context_file.uri,
+                            mime_type=context_file.mime_type
+                        )
+                    )
+                except Exception as e:
+                    print(f"Warning: Could not add context file {file_id}: {e}")
+        
+        # Add the main SWMS document to analyze
+        contents.append(
+            types.Part.from_uri(
+                file_uri=uploaded_file.uri,
+                mime_type=uploaded_file.mime_type
+            )
+        )
+        
         # Generate analysis using Gemini model
         response = client.models.generate_content(
             model='gemini-2.5-flash',
-            contents=[
-                assessment_prompt,
-                types.Part.from_uri(
-                    file_uri=uploaded_file.uri,
-                    mime_type=uploaded_file.mime_type
-                )
-            ]
+            contents=contents
         )
         
         # Parse the JSON response
@@ -546,14 +598,16 @@ Analyze the attached SWMS document thoroughly and provide the assessment in the 
 @mcp.tool()
 async def analyze_swms_text(
     document_text: str,
-    document_name: Optional[str] = "SWMS Document"
+    document_name: Optional[str] = "SWMS Document",
+    jurisdiction: Optional[str] = "nsw"
 ) -> Dict[str, Any]:
     """
-    Analyze SWMS text content directly for NSW WHS compliance.
+    Analyze SWMS text content directly for WHS compliance.
     
     Args:
         document_text: The SWMS document content as plain text or markdown
         document_name: Optional name for the document
+        jurisdiction: State/territory jurisdiction (nsw, vic, qld, wa, sa, tas, act, nt, national)
         
     Returns:
         Detailed compliance assessment report
@@ -795,7 +849,8 @@ async def analyze_swms_custom(
 @mcp.tool()
 async def get_compliance_score(
     document_id: str,
-    weighted: bool = True
+    weighted: bool = True,
+    jurisdiction: Optional[str] = "nsw"
 ) -> Dict[str, Any]:
     """
     Calculate numerical compliance scores for a SWMS document.
@@ -1075,6 +1130,80 @@ def _generate_quick_summary(check_type: str, result: Dict) -> str:
         except:
             return "Check completed."
     return "Check completed."
+
+@mcp.tool()
+async def list_jurisdictions() -> Dict[str, Any]:
+    """
+    List all supported jurisdictions for SWMS analysis.
+    
+    Returns:
+        Dictionary with supported jurisdictions and their details
+    """
+    jurisdictions = {
+        "national": {
+            "name": "National (Model Laws)",
+            "legislation": "Model Work Health and Safety Act and Regulations",
+            "regulator": "Safe Work Australia",
+            "terminology": "WHS"
+        },
+        "nsw": {
+            "name": "New South Wales",
+            "legislation": "Work Health and Safety Act 2011 (NSW) and Regulation 2017 (NSW)",
+            "regulator": "SafeWork NSW",
+            "terminology": "WHS"
+        },
+        "vic": {
+            "name": "Victoria",
+            "legislation": "Occupational Health and Safety Act 2004 (Vic) and Regulations 2017 (Vic)",
+            "regulator": "WorkSafe Victoria",
+            "terminology": "OHS",
+            "note": "Victoria uses OHS terminology and has not adopted model WHS laws"
+        },
+        "qld": {
+            "name": "Queensland",
+            "legislation": "Work Health and Safety Act 2011 (Qld) and Regulation 2011 (Qld)",
+            "regulator": "Workplace Health and Safety Queensland",
+            "terminology": "WHS"
+        },
+        "wa": {
+            "name": "Western Australia",
+            "legislation": "Work Health and Safety Act 2020 (WA) and Regulations 2022 (WA)",
+            "regulator": "WorkSafe Western Australia",
+            "terminology": "WHS",
+            "note": "Adopted WHS laws in 2022 with some variations"
+        },
+        "sa": {
+            "name": "South Australia",
+            "legislation": "Work Health and Safety Act 2012 (SA) and Regulations 2012 (SA)",
+            "regulator": "SafeWork SA",
+            "terminology": "WHS"
+        },
+        "tas": {
+            "name": "Tasmania",
+            "legislation": "Work Health and Safety Act 2012 (Tas) and Regulations 2012 (Tas)",
+            "regulator": "WorkSafe Tasmania",
+            "terminology": "WHS"
+        },
+        "act": {
+            "name": "Australian Capital Territory",
+            "legislation": "Work Health and Safety Act 2011 (ACT) and Regulation 2011 (ACT)",
+            "regulator": "WorkSafe ACT",
+            "terminology": "WHS"
+        },
+        "nt": {
+            "name": "Northern Territory",
+            "legislation": "Work Health and Safety (National Uniform Legislation) Act 2011 (NT)",
+            "regulator": "NT WorkSafe",
+            "terminology": "WHS"
+        }
+    }
+    
+    return {
+        "status": "success",
+        "jurisdictions": jurisdictions,
+        "default": "nsw",
+        "note": "All analysis functions support jurisdiction parameter. R2 context documents will be included if available."
+    }
 
 @mcp.tool()
 async def get_server_status() -> Dict[str, Any]:
