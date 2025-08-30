@@ -4,3 +4,4 @@ python-dotenv
 requests
 python-docx
 reportlab
+boto3  # Optional: for uploading documents to R2
