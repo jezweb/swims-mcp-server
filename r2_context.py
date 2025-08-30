@@ -14,8 +14,8 @@ from google.genai import types
 
 # R2 Configuration
 R2_BUCKET_NAME = "swms-regulations"
-# Update this URL after configuring public access in Cloudflare Dashboard
-R2_PUBLIC_URL = os.getenv("R2_PUBLIC_URL", "https://pub-e8c3e292cc5c4bbfae956efc0bd3a0a0.r2.dev")
+# Public R2 URL for accessing regulatory documents
+R2_PUBLIC_URL = os.getenv("R2_PUBLIC_URL", "https://pub-bb6a39bd73444f4582d3208b2257c357.r2.dev")
 
 # Cache configuration
 CACHE_DIR = Path("/tmp/swms-file-cache")

@@ -1,13 +1,16 @@
 # SWMS MCP Server
 
-A FastMCP server that analyzes Safe Work Method Statements (SWMS) for NSW construction compliance using Gemini AI.
+A FastMCP server that analyzes Safe Work Method Statements (SWMS) for Australian construction compliance using Gemini AI with jurisdiction-specific regulatory context.
 
 ## Features
 
-- Multiple document input methods (base64, URL, text)
-- NSW WHS Regulation 2017 compliance assessment
-- Detailed compliance reporting with actionable recommendations
-- Integration with Gemini 2.5 Flash for document understanding
+- **Multi-jurisdictional support** - All Australian states and territories (NSW, VIC, QLD, WA, SA, TAS, ACT, NT)
+- **Regulatory document context** - Automatic inclusion of relevant codes of practice and templates from Cloudflare R2
+- **Multiple document input methods** - Base64, URL, text, with automatic DOCX to PDF conversion
+- **Comprehensive compliance assessment** - Based on WHS/OHS regulations for each jurisdiction
+- **Custom analysis** - Flexible prompts and specialized compliance checks
+- **Numerical scoring** - Weighted compliance scores for tracking improvements
+- **Gemini 2.5 Flash integration** - Advanced document understanding with regulatory context
 
 ## Setup
 
