@@ -69,8 +69,30 @@ The prompt is comprehensive and covers:
 - Ready for GitHub push and FastMCP Cloud deployment
 - Environment variable configuration documented
 
-## Notes
+## Enhancement Implementation Plan (2024-12-30)
+
+### Priority Features to Implement
+1. **Custom Analysis Tool** - Flexible analysis with user-provided prompts
+2. **Compliance Scoring System** - Numerical scores for tracking
+3. **Quick Check Tool** - Fast checks for specific aspects
+4. **Generate Improvements** - AI-generated text to fix issues
+
+### Implementation Progress
+- [x] Custom Analysis Tool - ✅ Implemented `analyze_swms_custom()` with flexible prompts
+- [x] Compliance Scoring System - ✅ Implemented `get_compliance_score()` with weighted scoring
+- [x] Quick Check Tool - ✅ Implemented `quick_check_swms()` for specific aspect checks
+- [ ] Generate Improvements Tool
+
+### Design Principles
 - Keep it simple - no over-engineering
 - Modular design for maintainability
+- Reuse existing code where possible
+- Clear function names and documentation
+- Proper error handling
+- Test each feature before committing
+
+## Notes
 - Use environment variables for API keys
 - Follow FastMCP Cloud deployment requirements
+- Commit working features incrementally
+- Keep backward compatibility

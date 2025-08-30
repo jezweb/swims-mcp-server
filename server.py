@@ -699,6 +699,384 @@ DOCUMENT CONTENT:
         }
 
 @mcp.tool()
+async def analyze_swms_custom(
+    document_id: str,
+    analysis_prompt: str,
+    output_format: Optional[str] = "json"
+) -> Dict[str, Any]:
+    """
+    Perform custom analysis on a SWMS document using a user-provided prompt.
+    
+    Args:
+        document_id: ID of the uploaded SWMS document
+        analysis_prompt: Custom prompt for the analysis
+        output_format: Expected output format ('json', 'text', or 'structured')
+        
+    Returns:
+        Analysis results based on the custom prompt
+    """
+    try:
+        if not client:
+            return {
+                "status": "error",
+                "message": "Gemini API key not configured"
+            }
+        
+        # Get the uploaded file
+        try:
+            uploaded_file = client.files.get(name=document_id)
+        except Exception as e:
+            return {
+                "status": "error",
+                "message": f"Document not found: {document_id}"
+            }
+        
+        # Add format instructions based on output_format
+        format_instructions = ""
+        if output_format == "json":
+            format_instructions = "\n\nPlease return your response as valid JSON."
+        elif output_format == "structured":
+            format_instructions = "\n\nPlease structure your response with clear headings and bullet points."
+        else:  # text
+            format_instructions = "\n\nPlease provide a clear, detailed text response."
+        
+        full_prompt = analysis_prompt + format_instructions
+        
+        # Generate analysis using Gemini model
+        response = client.models.generate_content(
+            model='gemini-2.5-flash',
+            contents=[
+                full_prompt,
+                types.Part.from_uri(
+                    file_uri=uploaded_file.uri,
+                    mime_type=uploaded_file.mime_type
+                )
+            ]
+        )
+        
+        # Handle response based on expected format
+        if output_format == "json":
+            try:
+                # Try to parse as JSON
+                response_text = response.text.strip()
+                if response_text.startswith('```json'):
+                    response_text = response_text[7:-3].strip()
+                elif response_text.startswith('```'):
+                    response_text = response_text[3:-3].strip()
+                
+                result = json.loads(response_text)
+                return {
+                    "status": "success",
+                    "output_format": "json",
+                    "result": result
+                }
+            except json.JSONDecodeError:
+                # Fall back to text if JSON parsing fails
+                return {
+                    "status": "success",
+                    "output_format": "text",
+                    "result": response.text,
+                    "note": "JSON parsing failed, returning as text"
+                }
+        else:
+            # Return as text for other formats
+            return {
+                "status": "success",
+                "output_format": output_format,
+                "result": response.text
+            }
+        
+    except Exception as e:
+        return {
+            "status": "error",
+            "message": f"Failed to perform custom analysis: {str(e)}"
+        }
+
+@mcp.tool()
+async def get_compliance_score(
+    document_id: str,
+    weighted: bool = True
+) -> Dict[str, Any]:
+    """
+    Calculate numerical compliance scores for a SWMS document.
+    
+    Args:
+        document_id: ID of the uploaded SWMS document
+        weighted: If True, weight scores by importance (HRCW and controls weighted higher)
+        
+    Returns:
+        Compliance scores for each area and overall score
+    """
+    try:
+        if not client:
+            return {
+                "status": "error",
+                "message": "Gemini API key not configured"
+            }
+        
+        # Get the uploaded file
+        try:
+            uploaded_file = client.files.get(name=document_id)
+        except Exception as e:
+            return {
+                "status": "error",
+                "message": f"Document not found: {document_id}"
+            }
+        
+        # Scoring prompt
+        scoring_prompt = """
+Analyze this SWMS document and provide numerical compliance scores (0-100) for NSW WHS compliance.
+
+Score each area based on:
+- 0-25: Non-compliant (critical elements missing)
+- 26-50: Partially compliant (significant gaps)
+- 51-75: Mostly compliant (minor improvements needed)
+- 76-100: Fully compliant (meets or exceeds requirements)
+
+Return a JSON object with this exact structure:
+{
+  "scores": {
+    "document_control": {
+      "score": [0-100],
+      "justification": "[Brief reason for score]"
+    },
+    "hrcw_identification": {
+      "score": [0-100],
+      "justification": "[Brief reason for score]"
+    },
+    "hazard_identification": {
+      "score": [0-100],
+      "justification": "[Brief reason for score]"
+    },
+    "control_measures": {
+      "score": [0-100],
+      "justification": "[Brief reason for score]"
+    },
+    "monitoring_review": {
+      "score": [0-100],
+      "justification": "[Brief reason for score]"
+    },
+    "consultation": {
+      "score": [0-100],
+      "justification": "[Brief reason for score]"
+    }
+  }
+}
+"""
+        
+        # Generate analysis using Gemini model
+        response = client.models.generate_content(
+            model='gemini-2.5-flash',
+            contents=[
+                scoring_prompt,
+                types.Part.from_uri(
+                    file_uri=uploaded_file.uri,
+                    mime_type=uploaded_file.mime_type
+                )
+            ]
+        )
+        
+        # Parse the JSON response
+        try:
+            response_text = response.text.strip()
+            if response_text.startswith('```json'):
+                response_text = response_text[7:-3].strip()
+            elif response_text.startswith('```'):
+                response_text = response_text[3:-3].strip()
+            
+            result = json.loads(response_text)
+            scores = result.get("scores", {})
+            
+            # Calculate overall score
+            if weighted:
+                # Weighted importance (total = 100%)
+                weights = {
+                    "document_control": 0.10,
+                    "hrcw_identification": 0.25,  # Critical for safety
+                    "hazard_identification": 0.20,
+                    "control_measures": 0.25,  # Critical for safety
+                    "monitoring_review": 0.10,
+                    "consultation": 0.10
+                }
+            else:
+                # Equal weighting
+                weights = {k: 1/6 for k in scores.keys()}
+            
+            overall_score = 0
+            for area, data in scores.items():
+                if isinstance(data, dict) and "score" in data:
+                    overall_score += data["score"] * weights.get(area, 0)
+            
+            return {
+                "status": "success",
+                "overall_score": round(overall_score, 1),
+                "weighted": weighted,
+                "area_scores": scores,
+                "weights_used": weights if weighted else "equal",
+                "compliance_level": (
+                    "Non-Compliant" if overall_score < 26 else
+                    "Partially Compliant" if overall_score < 51 else
+                    "Mostly Compliant" if overall_score < 76 else
+                    "Fully Compliant"
+                )
+            }
+            
+        except (json.JSONDecodeError, KeyError) as e:
+            return {
+                "status": "error",
+                "message": f"Failed to parse scoring response: {str(e)}",
+                "raw_response": response.text[:1000]
+            }
+        
+    except Exception as e:
+        return {
+            "status": "error",
+            "message": f"Failed to calculate compliance score: {str(e)}"
+        }
+
+@mcp.tool()
+async def quick_check_swms(
+    document_id: str,
+    check_type: str
+) -> Dict[str, Any]:
+    """
+    Perform a quick focused check on specific aspects of a SWMS document.
+    
+    Args:
+        document_id: ID of the uploaded SWMS document
+        check_type: Type of check to perform. Options:
+                   - 'hrcw': Check for High-Risk Construction Work identification
+                   - 'ppe': Check PPE requirements
+                   - 'emergency': Check emergency procedures
+                   - 'signatures': Check for sign-off sections
+                   - 'hierarchy': Check hierarchy of controls
+                   - 'hazards': Quick hazard identification check
+        
+    Returns:
+        Quick check results focused on the specific aspect
+    """
+    try:
+        if not client:
+            return {
+                "status": "error",
+                "message": "Gemini API key not configured"
+            }
+        
+        # Get the uploaded file
+        try:
+            uploaded_file = client.files.get(name=document_id)
+        except Exception as e:
+            return {
+                "status": "error",
+                "message": f"Document not found: {document_id}"
+            }
+        
+        # Define check-specific prompts
+        check_prompts = {
+            "hrcw": """
+Check this SWMS for High-Risk Construction Work (HRCW) identification.
+Look for activities from the 18 HRCW categories in NSW WHS Regulation 2017.
+Return JSON: {"hrcw_found": [list of HRCW activities], "properly_identified": true/false, "missing": [any likely HRCW not explicitly identified]}
+""",
+            "ppe": """
+Check PPE requirements in this SWMS.
+Return JSON: {"ppe_specified": true/false, "ppe_items": [list of PPE required], "task_specific_ppe": {task: [ppe_items]}, "gaps": [missing PPE]}
+""",
+            "emergency": """
+Check emergency procedures in this SWMS.
+Return JSON: {"emergency_procedures": true/false, "contact_numbers": true/false, "evacuation_plan": true/false, "first_aid": true/false, "issues": [list of missing items]}
+""",
+            "signatures": """
+Check for worker consultation and sign-off provisions.
+Return JSON: {"sign_off_section": true/false, "consultation_evidence": true/false, "responsible_person": "name or not specified", "issues": [list of problems]}
+""",
+            "hierarchy": """
+Check if control measures follow the hierarchy of controls.
+Return JSON: {"hierarchy_followed": true/false, "elimination": [examples], "substitution": [examples], "engineering": [examples], "administrative": [examples], "ppe": [examples], "issues": [problems with hierarchy application]}
+""",
+            "hazards": """
+Quick check of hazard identification completeness.
+Return JSON: {"hazards_identified": [list of hazards], "site_specific": true/false, "generic_only": true/false, "missing_common": [likely missing hazards], "count": number}
+"""
+        }
+        
+        # Get the appropriate prompt
+        prompt = check_prompts.get(check_type)
+        if not prompt:
+            return {
+                "status": "error",
+                "message": f"Invalid check_type: {check_type}. Valid options: {list(check_prompts.keys())}"
+            }
+        
+        # Add instruction for clean JSON
+        prompt += "\n\nReturn ONLY valid JSON, no markdown formatting or explanations."
+        
+        # Generate analysis using Gemini model
+        response = client.models.generate_content(
+            model='gemini-2.5-flash',
+            contents=[
+                prompt,
+                types.Part.from_uri(
+                    file_uri=uploaded_file.uri,
+                    mime_type=uploaded_file.mime_type
+                )
+            ]
+        )
+        
+        # Parse the JSON response
+        try:
+            response_text = response.text.strip()
+            if response_text.startswith('```json'):
+                response_text = response_text[7:-3].strip()
+            elif response_text.startswith('```'):
+                response_text = response_text[3:-3].strip()
+            
+            result = json.loads(response_text)
+            
+            return {
+                "status": "success",
+                "check_type": check_type,
+                "result": result,
+                "quick_summary": _generate_quick_summary(check_type, result)
+            }
+            
+        except json.JSONDecodeError as e:
+            # Still return the text result if JSON parsing fails
+            return {
+                "status": "success",
+                "check_type": check_type,
+                "result": {"raw_response": response.text},
+                "note": "Response was not valid JSON"
+            }
+        
+    except Exception as e:
+        return {
+            "status": "error",
+            "message": f"Failed to perform quick check: {str(e)}"
+        }
+
+def _generate_quick_summary(check_type: str, result: Dict) -> str:
+    """Generate a quick text summary based on check results."""
+    summaries = {
+        "hrcw": lambda r: f"Found {len(r.get('hrcw_found', []))} HRCW activities. " +
+                         ("Properly identified." if r.get('properly_identified') else "Issues with identification."),
+        "ppe": lambda r: "PPE specified." if r.get('ppe_specified') else "PPE requirements missing or incomplete.",
+        "emergency": lambda r: "Emergency procedures present." if r.get('emergency_procedures') else "Emergency procedures missing.",
+        "signatures": lambda r: "Sign-off section present." if r.get('sign_off_section') else "Sign-off section missing.",
+        "hierarchy": lambda r: "Hierarchy of controls followed." if r.get('hierarchy_followed') else "Issues with hierarchy of controls.",
+        "hazards": lambda r: f"Identified {r.get('count', 0)} hazards. " +
+                            ("Site-specific." if r.get('site_specific') else "Generic hazards only.")
+    }
+    
+    summary_func = summaries.get(check_type)
+    if summary_func and isinstance(result, dict):
+        try:
+            return summary_func(result)
+        except:
+            return "Check completed."
+    return "Check completed."
+
+@mcp.tool()
 async def get_server_status() -> Dict[str, Any]:
     """
     Get the current status of the SWMS analysis server.
