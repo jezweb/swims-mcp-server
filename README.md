@@ -2,119 +2,247 @@
 
 A FastMCP server that analyzes Safe Work Method Statements (SWMS) for Australian construction compliance using Gemini AI with jurisdiction-specific regulatory context.
 
-## Features
+## 🌟 Key Features
 
-- **Multi-jurisdictional support** - All Australian states and territories (NSW, VIC, QLD, WA, SA, TAS, ACT, NT)
-- **Regulatory document context** - Automatic inclusion of relevant codes of practice and templates from Cloudflare R2
-- **Multiple document input methods** - Base64, URL, text, with automatic DOCX to PDF conversion
-- **Comprehensive compliance assessment** - Based on WHS/OHS regulations for each jurisdiction
-- **Custom analysis** - Flexible prompts and specialized compliance checks
-- **Numerical scoring** - Weighted compliance scores for tracking improvements
-- **Gemini 2.5 Flash integration** - Advanced document understanding with regulatory context
+- **🌏 Multi-jurisdictional Support** - All Australian states and territories (NSW, VIC, QLD, WA, SA, TAS, ACT, NT)
+- **📚 Regulatory Context** - Automatic inclusion of 25+ official documents from Cloudflare R2
+- **📄 Flexible Input** - Base64, URL, text, with automatic DOCX to PDF conversion
+- **✅ Comprehensive Analysis** - Based on WHS/OHS regulations for each jurisdiction
+- **🎯 Custom Analysis** - Flexible prompts and specialized compliance checks
+- **📊 Numerical Scoring** - Weighted compliance scores for tracking improvements
+- **🤖 Gemini 2.5 Flash** - Advanced document understanding with regulatory context
 
-## Setup
+## 🚀 Quick Start
 
-1. Install dependencies:
+### Installation
+
 ```bash
+# Clone the repository
+git clone https://github.com/jezweb/swims-mcp-server.git
+cd swims-mcp-server
+
+# Install dependencies
 pip install -r requirements.txt
-```
 
-2. Set up environment variables:
-```bash
+# Set up environment
 cp .env.example .env
-# Add your GEMINI_API_KEY to .env
+# Edit .env and add your GEMINI_API_KEY
 ```
 
-3. Run the server:
+### Running the Server
+
 ```bash
+# Development
+fastmcp dev server.py
+
+# Production
 fastmcp run server.py
 ```
 
-## Tools
+## 📖 Usage Examples
 
-### `upload_swms_document`
-Upload a SWMS document from base64-encoded content.
+### Basic SWMS Analysis (NSW)
 
-**Parameters:**
-- `file_content` (string): Base64-encoded file content
-- `file_name` (string): Name of the file (e.g., "safety_plan.pdf")
-- `mime_type` (string, optional): MIME type (auto-detected if not provided)
+```python
+# Upload document
+upload_result = await upload_swms_from_url({
+    "url": "https://example.com/construction-swms.pdf"
+})
 
-**Example:**
-```json
-{
-  "file_content": "JVBERi0xLjQKJdPr6...",
-  "file_name": "construction_swms.pdf"
-}
+# Analyze for NSW compliance (default)
+analysis = await analyze_swms_compliance({
+    "document_id": upload_result["document_id"]
+})
 ```
 
-### `upload_swms_from_url`
-Upload a SWMS document from a URL.
+### Victoria-Specific Analysis (OHS)
 
-**Parameters:**
-- `url` (string): URL of the SWMS document (PDF or DOCX)
-
-**Example:**
-```json
-{
-  "url": "https://example.com/documents/swms.pdf"
-}
+```python
+# Victoria uses OHS terminology, not WHS
+analysis = await analyze_swms_compliance({
+    "document_id": document_id,
+    "jurisdiction": "vic"  # Uses OHS regulations
+})
 ```
 
-### `analyze_swms_text`
-Analyze SWMS text content directly without file upload.
+### Get Compliance Score
 
-**Parameters:**
-- `document_text` (string): The SWMS document content as plain text or markdown
-- `document_name` (string, optional): Name for the document
-
-**Example:**
-```json
-{
-  "document_text": "SAFE WORK METHOD STATEMENT\n\nProject: Construction Site...",
-  "document_name": "Site Safety SWMS"
-}
+```python
+# Get numerical score for tracking
+score = await get_compliance_score({
+    "document_id": document_id,
+    "weighted": True,
+    "jurisdiction": "qld"
+})
+# Returns overall score, category breakdowns, and recommendations
 ```
 
-### `analyze_swms_compliance`
-Analyze an uploaded document for NSW WHS compliance.
+### Quick Checks
 
-**Parameters:**
-- `document_id` (string): ID returned from upload tools
+```python
+# Quick check for specific aspects
+result = await quick_check_swms({
+    "document_id": document_id,
+    "check_type": "high_risk",  # or "emergency", "ppe", "controls", etc.
+    "jurisdiction": "wa"
+})
+```
 
-**Returns:**
-Detailed compliance assessment with:
-- Overall compliance status
-- Six assessment areas analysis
-- Urgent actions required
-- Recommendations for improvement
+### Custom Analysis
 
-### `get_server_status`
-Check server status and API connectivity.
+```python
+# Custom analysis with your own prompt
+custom = await analyze_swms_custom({
+    "document_id": document_id,
+    "analysis_prompt": "Check if this SWMS adequately addresses mental health and fatigue management for night shift workers",
+    "jurisdiction": "sa"
+})
+```
 
-## How AI Agents Use This Server
+## 🔧 Available Tools
 
-AI agents can interact with this MCP server in three ways:
+| Tool | Description | Key Parameters |
+|------|-------------|---------------|
+| `upload_swms_document` | Upload from base64 content | `file_content`, `file_name` |
+| `upload_swms_from_url` | Upload from URL | `url` |
+| `analyze_swms_compliance` | Full compliance analysis | `document_id`, `jurisdiction` |
+| `analyze_swms_text` | Analyze text directly | `document_text`, `jurisdiction` |
+| `analyze_swms_custom` | Custom prompt analysis | `document_id`, `analysis_prompt` |
+| `get_compliance_score` | Numerical scoring | `document_id`, `weighted` |
+| `quick_check_swms` | Rapid specific checks | `document_id`, `check_type` |
+| `list_jurisdictions` | Get supported jurisdictions | None |
+| `get_server_status` | Check server health | None |
 
-1. **Base64 Upload**: Convert the document to base64 and send it directly
-2. **URL Upload**: Provide a URL where the document is hosted
-3. **Text Analysis**: Send document text directly for analysis
+## 🏛️ Jurisdiction Support
 
-The server handles all file processing internally and returns structured compliance reports.
+| State/Territory | Code | Legislation | Regulator | Notes |
+|----------------|------|-------------|-----------|--------|
+| New South Wales | `nsw` | WHS Act 2011 | SafeWork NSW | Default jurisdiction |
+| Victoria | `vic` | OHS Act 2004 | WorkSafe Victoria | Uses OHS terminology |
+| Queensland | `qld` | WHS Act 2011 | WHSQ | Model laws |
+| Western Australia | `wa` | WHS Act 2020 | WorkSafe WA | Adopted 2022 |
+| South Australia | `sa` | WHS Act 2012 | SafeWork SA | 3m fall height |
+| Tasmania | `tas` | WHS Act 2012 | WorkSafe Tasmania | Model laws |
+| ACT | `act` | WHS Act 2011 | WorkSafe ACT | Model laws |
+| Northern Territory | `nt` | WHS Act 2011 | NT WorkSafe | Model laws |
+| National | `national` | Model Laws | Safe Work Australia | Model framework |
 
-## Deployment
+## 📚 Regulatory Document Context
 
-Deploy to FastMCP Cloud:
-1. Connect this GitHub repository to [FastMCP Cloud](https://fastmcp.cloud)
-2. Add `GEMINI_API_KEY` environment variable
-3. Deploy
+The server automatically includes relevant regulatory documents from R2:
 
-## Compliance Framework
+- **Codes of Practice** - Construction work guidelines for each jurisdiction
+- **SWMS Templates** - Official templates and examples
+- **Information Sheets** - Guidance on SWMS requirements
+- **Fact Sheets** - Quick reference materials
 
-The server assesses SWMS documents against NSW WHS Regulation 2017:
-- Document Control & Administrative Compliance
-- High-Risk Construction Work (HRCW) identification
-- Hazard Identification & Risk Assessment
-- Control Measures (Hierarchy of Controls)
-- Monitoring, Review, and Communication
-- Consultation requirements
+Documents are fetched from: `https://pub-bb6a39bd73444f4582d3208b2257c357.r2.dev`
+
+## 🎯 Compliance Assessment Areas
+
+The server evaluates SWMS against six key areas:
+
+1. **Document Control** (10% weight)
+   - Project details, version control, responsibilities
+
+2. **HRCW Identification** (20% weight)
+   - 18 categories of high-risk construction work
+
+3. **Hazard Identification** (15% weight)
+   - Site-specific hazards, risk descriptions
+
+4. **Control Measures** (25% weight)
+   - Hierarchy of controls implementation
+
+5. **Monitoring & Review** (15% weight)
+   - Review triggers, monitoring procedures
+
+6. **Consultation** (15% weight)
+   - Worker consultation, sign-off records
+
+## ☁️ Deployment
+
+### FastMCP Cloud
+
+1. Push to GitHub
+2. Connect repository to [FastMCP Cloud](https://fastmcp.cloud)
+3. Add environment variables:
+   - `GEMINI_API_KEY` (required)
+   - `R2_PUBLIC_URL` (optional, defaults to configured URL)
+4. Deploy
+
+### Local Development
+
+```bash
+# Install FastMCP
+pip install fastmcp
+
+# Run in development mode
+fastmcp dev server.py
+
+# Access at default MCP endpoint
+```
+
+## 🔐 Environment Variables
+
+```bash
+# Required
+GEMINI_API_KEY=your_gemini_api_key_here
+
+# Optional (defaults provided)
+R2_PUBLIC_URL=https://pub-bb6a39bd73444f4582d3208b2257c357.r2.dev
+```
+
+## 📁 Project Structure
+
+```
+swms-mcp-server/
+├── server.py                 # Main MCP server
+├── r2_context.py            # R2 document management
+├── requirements.txt         # Python dependencies
+├── .env.example            # Environment template
+├── regulatory_documents/    # Local document cache
+│   ├── national/          # Safe Work Australia docs
+│   ├── nsw/              # NSW specific docs
+│   ├── vic/              # Victoria OHS docs
+│   └── ...               # Other jurisdictions
+└── docs/                   # Documentation
+    ├── API_DOCUMENTATION.md
+    ├── DOCUMENT_MANAGEMENT.md
+    └── R2_DEPLOYMENT_STATUS.md
+```
+
+## 🤝 Contributing
+
+Contributions are welcome! Please:
+1. Fork the repository
+2. Create a feature branch
+3. Add tests for new features
+4. Submit a pull request
+
+## 📄 License
+
+MIT License - see LICENSE file for details
+
+## 🆘 Support
+
+- **Issues**: [GitHub Issues](https://github.com/jezweb/swims-mcp-server/issues)
+- **Documentation**: See `/docs` folder
+- **API Reference**: [API_DOCUMENTATION.md](./API_DOCUMENTATION.md)
+
+## 🏗️ Built With
+
+- [FastMCP](https://github.com/jlowin/fastmcp) - MCP server framework
+- [Gemini AI](https://ai.google.dev/) - Document analysis
+- [Cloudflare R2](https://www.cloudflare.com/products/r2/) - Document storage
+- Python 3.11+ - Runtime environment
+
+## 📈 Version History
+
+- **v1.0.0** - Initial release with multi-jurisdictional support
+- **v1.1.0** - Added R2 integration and regulatory context
+- **v1.2.0** - Custom analysis and scoring features
+
+---
+
+Made with ❤️ for Australian construction safety compliance
