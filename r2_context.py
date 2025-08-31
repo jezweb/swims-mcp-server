@@ -245,3 +245,28 @@ class R2ContextManager:
                 "SWMS required before work commences",
                 "Principal contractor coordination requirements"
             ]
+    
+    async def get_context_for_jurisdiction(self, jurisdiction: str = "nsw") -> List[Dict[str, str]]:
+        """
+        Get Gemini file context for jurisdiction as formatted file info.
+        Returns list of dicts with 'uri' and 'mime_type' keys for Gemini API.
+        
+        Args:
+            jurisdiction: State/territory code (nsw, vic, qld, etc.)
+            
+        Returns:
+            List of file info dicts with 'uri' and 'mime_type' keys
+        """
+        file_infos = []
+        
+        # Get file IDs using existing method
+        file_ids = self.get_context_files(jurisdiction)
+        
+        # Convert file IDs to the expected format
+        for file_id in file_ids:
+            file_infos.append({
+                "uri": file_id,  # Gemini file ID serves as URI
+                "mime_type": "application/pdf"  # All regulatory docs are PDFs
+            })
+        
+        return file_infos

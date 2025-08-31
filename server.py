@@ -1274,13 +1274,24 @@ async def generate_swms_from_description_tool(
     Generate a complete SWMS from a job description using AI.
     
     Args:
-        job_description: Plain English description of the work
-        trade_type: Type of trade (electrical, plumbing, carpentry, etc.)
-        site_type: Type of site (residential, commercial, industrial, etc.)
-        jurisdiction: State/territory code (nsw, vic, qld, etc.)
+        job_description: Plain English description of the work to be performed
+        trade_type: Type of trade - examples: electrical, plumbing, carpentry, 
+                   roofing, scaffolding, demolition, concrete, painting, hvac, 
+                   glazing, steel_erection, excavation
+        site_type: Type of site (default: commercial) - options: residential, 
+                  commercial, industrial, infrastructure, mining, healthcare, 
+                  educational, retail
+        jurisdiction: Australian state/territory code (default: nsw) - options: 
+                     nsw, vic, qld, wa, sa, tas, act, nt, national
     
     Returns:
-        Complete SWMS document ready for review
+        Complete SWMS document ready for review with metadata and next steps
+    
+    Example:
+        job_description: "Installing new power outlets in office building second floor"
+        trade_type: "electrical"
+        site_type: "commercial"
+        jurisdiction: "nsw"
     """
     return await generate_swms_from_description(job_description, trade_type, site_type, jurisdiction)
 
@@ -1333,8 +1344,9 @@ async def suggest_swms_improvements_tool(
     
     Args:
         document_id: ID of the uploaded SWMS document
-        incident_history: List of recent incidents to consider
-        improvement_focus: Focus area (safety, efficiency, or compliance)
+        incident_history: Optional list of recent incidents to consider 
+                         (e.g., ["Near miss with falling tools", "Slip on wet surface"])
+        improvement_focus: Focus area (default: safety) - options: safety, efficiency, compliance
     
     Returns:
         Prioritized improvement recommendations with explanations
