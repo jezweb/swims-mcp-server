@@ -632,7 +632,7 @@ async def analyze_swms_compliance(
         
         # Get the Gemini file object directly
         try:
-            gemini_file = client.files.get(document_id)
+            gemini_file = client.files.get(name=document_id)
         except Exception as e:
             return {
                 "status": "error",
@@ -995,7 +995,7 @@ async def analyze_swms_custom(
         
         # Get the Gemini file object directly
         try:
-            gemini_file = client.files.get(document_id)
+            gemini_file = client.files.get(name=document_id)
         except Exception as e:
             return {
                 "status": "error",
@@ -1085,7 +1085,7 @@ async def get_compliance_score(
         
         # Get the Gemini file object directly
         try:
-            gemini_file = client.files.get(document_id)
+            gemini_file = client.files.get(name=document_id)
         except Exception as e:
             return {
                 "status": "error",
@@ -1230,7 +1230,7 @@ async def quick_check_swms(
         
         # Get the Gemini file object directly
         try:
-            gemini_file = client.files.get(document_id)
+            gemini_file = client.files.get(name=document_id)
         except Exception as e:
             return {
                 "status": "error",
