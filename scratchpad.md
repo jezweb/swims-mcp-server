@@ -159,38 +159,42 @@ swims-mcp-server/
 - Output: List of identified hazards with risk ratings
 - Uses Gemini vision capabilities
 
-## File Upload Solution Implementation (2025-01-31) 🚧 IN PROGRESS
+## File Upload Solution - Final Implementation (2025-01-31) ✅ COMPLETED
 
 ### Problem Identified
-- SWMS MCP server deployed on FastMCP Cloud cannot access local files
-- Need to upload and analyze SWMS documents while preserving structure
-- Gemini's document understanding is key requirement (no text extraction)
+- MCP protocol is JSON-based and cannot transport binary data
+- Need to analyze SWMS documents while preserving structure for Gemini
+- Remote MCP servers cannot access local files directly
 
-### Solution: HTTP File Upload Endpoint + Enhanced MCP Tools
+### Solution: URL-Based File Access
 
-#### Architecture
-1. **HTTP Upload Endpoint**: Custom route `/upload` for multipart/form-data
-2. **Temporary Storage**: Container-local file storage with TTL cleanup
-3. **Gemini Integration**: Immediate upload to Gemini Files API for document understanding
-4. **Enhanced MCP Tools**: Use document_id from uploads instead of local file paths
+#### Final Architecture
+1. **URL Upload Tool**: `upload_swms_from_url` accepts any accessible URL
+2. **Cloud Storage Integration**: Works with R2, S3, Google Drive, Dropbox, etc.
+3. **Gemini Integration**: Downloads from URL, uploads to Gemini for analysis
+4. **Existing Tools**: All analysis tools work with the returned document_id
 
-#### Implementation Plan
-- [x] Research FastMCP custom route capabilities
-- [x] Design file upload and storage architecture  
-- [ ] Add HTTP file upload endpoint to server.py
-- [ ] Implement temporary file storage system
-- [ ] Enhance existing MCP tools to work with document IDs
-- [ ] Add file cleanup and management
-- [ ] Test complete upload and analysis flow
+#### What We Learned
+- Tried pure MCP streaming with base64 chunks - removed due to token limits
+- 1MB file ≈ 350K tokens when base64 encoded (exceeds most model contexts)
+- MCP is for control/orchestration, not data transport
+- URL-based approach is simpler and more practical
 
-#### Usage Flow
-1. POST file to `https://server.fastmcp.app/upload`
-2. Get `document_id` from response
-3. Use MCP tools with `document_id` parameter
-4. Get full compliance analysis with document structure preserved
+#### Current Usage
+```python
+# Upload from URL
+result = await mcp.call_tool("upload_swms_from_url", {
+    "url": "https://your-storage.com/swms.pdf"
+})
 
-#### Benefits
-- Preserves document structure for Gemini's document understanding
-- Works with remote FastMCP Cloud deployment  
-- Maintains existing MCP tool interface
-- Enables analysis of local files without text extraction
+# Analyze with any tool
+analysis = await mcp.call_tool("analyze_swms_compliance", {
+    "document_id": result["document_id"]
+})
+```
+
+#### Integration with Web Apps
+1. Web app handles file upload to cloud storage (R2, S3, etc.)
+2. Web app gets URL from storage service
+3. Web app calls MCP with URL
+4. MCP downloads, analyzes, returns results

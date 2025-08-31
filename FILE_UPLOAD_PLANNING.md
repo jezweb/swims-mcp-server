@@ -1,7 +1,10 @@
 # File Upload Solutions for MCP Servers
 
 ## Problem Statement
-MCP protocol has no native file upload mechanism. Users need to send files to remote MCP servers without using web forms or curl commands.
+MCP protocol has no native file upload mechanism (it's JSON-based and cannot transport binary data). Users need to send files to remote MCP servers without complex client-side implementations.
+
+## Final Solution: URL-Based File Access
+After exploring multiple approaches, we've settled on URL-based file access as the most practical solution.
 
 ## Solution 1: Cloud Storage with Presigned URLs (Recommended)
 
@@ -368,32 +371,52 @@ async def stream_file_via_mcp(filepath, mcp_server_url):
 
 ---
 
-## Recommendation
+## Current Implementation
 
-**Use Solution 1 (Cloud Storage with Presigned URLs)** for production because:
-1. Industry standard approach
-2. Scalable and efficient
-3. Leverages purpose-built infrastructure
-4. Lower latency and overhead
-5. Better user experience
+The SWMS MCP Server uses **URL-based file access** through the `upload_swms_from_url` tool:
 
-**Consider Solution 2 (In-Protocol Streaming)** only if:
-1. Absolutely cannot use external storage
-2. Files are small (<5MB)
-3. Latency is not critical
-4. Need pure MCP-only solution
+```python
+# Upload a document from any accessible URL
+result = await mcp.call_tool("upload_swms_from_url", {
+    "url": "https://your-bucket.r2.dev/documents/swms.pdf"
+})
 
-## Implementation Priority
+# Use the returned document_id for analysis
+analysis = await mcp.call_tool("analyze_swms_compliance", {
+    "document_id": result["document_id"],
+    "jurisdiction": "nsw"
+})
+```
 
-1. **Phase 1**: Keep current HTTP upload endpoint as fallback
-2. **Phase 2**: Implement cloud storage with presigned URLs
-3. **Phase 3**: Create local bridge script for developers
-4. **Phase 4**: Consider in-protocol streaming for special cases
+### Supported URL Sources
+- **R2/S3 buckets** (public or presigned URLs)
+- **Google Drive** (public share links)
+- **Dropbox** (public share links)
+- **Direct HTTP/HTTPS** URLs
+- **Any publicly accessible file URL**
 
-## Next Steps
+### Integration Pattern
+1. **Web Application**: Handles file upload to cloud storage (R2, S3, etc.)
+2. **Storage Service**: Returns a URL for the uploaded file
+3. **MCP Server**: Downloads file from URL, uploads to Gemini, analyzes
+4. **Results**: Returned through MCP protocol
 
-1. Configure R2 bucket for public uploads
-2. Add boto3 to requirements.txt
-3. Implement presigned URL tools
-4. Create documentation and examples
-5. Test with various file sizes and types
+### Why This Approach?
+After testing pure MCP streaming (chunked base64 transfer), we found:
+- MCP protocol cannot efficiently transport binary data (33% base64 overhead)
+- Token limits make large file transfers impractical (1MB ≈ 350K tokens)
+- URL-based access is simpler and more efficient
+- Works with existing cloud storage infrastructure
+- No client-side complexity required
+
+## Alternative Approaches Considered
+
+### Solution 2: In-Protocol Streaming (Not Recommended)
+We implemented and tested pure MCP file streaming with base64 chunks, but removed it due to:
+- High token consumption (impractical for files >100KB)
+- Requires client-side file handling (defeats the purpose)
+- Multiple round-trips add latency
+- Complex implementation for minimal benefit
+
+### Key Learning
+MCP protocol is designed for control/command operations, not data transport. Use appropriate infrastructure (cloud storage) for file handling and MCP for orchestration.
