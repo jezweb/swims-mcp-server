@@ -387,6 +387,54 @@ async def upload_swms_from_url(url: str) -> Dict[str, Any]:
         }
 
 @mcp.tool()
+async def upload_swms_from_file(file_path: str) -> Dict[str, Any]:
+    """
+    Upload a SWMS document from a local file path.
+    
+    Args:
+        file_path: Path to the local SWMS file (PDF or DOCX)
+        
+    Returns:
+        Dictionary with upload status and document ID
+    """
+    try:
+        # Check if file exists
+        if not os.path.exists(file_path):
+            return {
+                "status": "error",
+                "message": f"File not found: {file_path}"
+            }
+        
+        # Read file and encode to base64
+        try:
+            with open(file_path, 'rb') as f:
+                file_bytes = f.read()
+            file_content = base64.b64encode(file_bytes).decode('utf-8')
+        except Exception as e:
+            return {
+                "status": "error",
+                "message": f"Failed to read file: {str(e)}"
+            }
+        
+        # Get file name from path
+        file_name = os.path.basename(file_path)
+        
+        # Call existing upload_swms_document function
+        result = await upload_swms_document(file_content, file_name)
+        
+        # Add source file path to response
+        if result.get("status") == "success":
+            result["file_info"]["source_path"] = file_path
+        
+        return result
+        
+    except Exception as e:
+        return {
+            "status": "error", 
+            "message": f"Failed to upload document from file: {str(e)}"
+        }
+
+@mcp.tool()
 async def analyze_swms_compliance(
     document_id: str,
     jurisdiction: Optional[str] = "nsw"
@@ -1237,6 +1285,7 @@ async def get_server_status() -> Dict[str, Any]:
         "capabilities": [
             "upload_swms_document",
             "upload_swms_from_url",
+            "upload_swms_from_file",
             "analyze_swms_text",
             "analyze_swms_compliance",
             "analyze_swms_custom",
