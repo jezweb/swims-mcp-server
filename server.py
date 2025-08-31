@@ -1238,10 +1238,127 @@ async def get_server_status() -> Dict[str, Any]:
             "upload_swms_document",
             "upload_swms_from_url",
             "analyze_swms_text",
-            "analyze_swms_compliance", 
-            "get_server_status"
+            "analyze_swms_compliance",
+            "analyze_swms_custom",
+            "get_compliance_score",
+            "quick_check_swms",
+            "list_jurisdictions",
+            "get_server_status",
+            # New generation and analysis tools
+            "generate_swms_from_description_tool",
+            "generate_toolbox_talk_tool",
+            "create_worker_summary_tool",
+            "suggest_swms_improvements_tool",
+            "extract_hazards_from_image_tool"
         ]
     }
+
+# Import new tools
+from tools import (
+    generate_swms_from_description,
+    generate_toolbox_talk,
+    create_worker_summary,
+    suggest_swms_improvements,
+    extract_hazards_from_image
+)
+
+# Register new tools with MCP
+@mcp.tool()
+async def generate_swms_from_description_tool(
+    job_description: str,
+    trade_type: str,
+    site_type: str = "commercial",
+    jurisdiction: str = "nsw"
+) -> Dict[str, Any]:
+    """
+    Generate a complete SWMS from a job description using AI.
+    
+    Args:
+        job_description: Plain English description of the work
+        trade_type: Type of trade (electrical, plumbing, carpentry, etc.)
+        site_type: Type of site (residential, commercial, industrial, etc.)
+        jurisdiction: State/territory code (nsw, vic, qld, etc.)
+    
+    Returns:
+        Complete SWMS document ready for review
+    """
+    return await generate_swms_from_description(job_description, trade_type, site_type, jurisdiction)
+
+@mcp.tool()
+async def generate_toolbox_talk_tool(
+    document_id: str,
+    duration: str = "5min",
+    focus_area: Optional[str] = None
+) -> Dict[str, Any]:
+    """
+    Generate a toolbox talk from a SWMS document.
+    
+    Args:
+        document_id: ID of the uploaded SWMS document
+        duration: Duration of talk (5min, 10min, or 15min)
+        focus_area: Specific area to focus on (optional)
+    
+    Returns:
+        Bullet points and talking notes for supervisors
+    """
+    return await generate_toolbox_talk(document_id, duration, focus_area)
+
+@mcp.tool()
+async def create_worker_summary_tool(
+    document_id: str,
+    language_level: str = "simple",
+    include_symbols: bool = True
+) -> Dict[str, Any]:
+    """
+    Create a simplified worker summary from a SWMS document.
+    
+    Args:
+        document_id: ID of the uploaded SWMS document
+        language_level: Language complexity (simple, visual, standard)
+        include_symbols: Whether to include emoji symbols for hazards
+    
+    Returns:
+        Simplified safety card format for workers
+    """
+    return await create_worker_summary(document_id, language_level, include_symbols)
+
+@mcp.tool()
+async def suggest_swms_improvements_tool(
+    document_id: str,
+    incident_history: Optional[List[str]] = None,
+    improvement_focus: str = "safety"
+) -> Dict[str, Any]:
+    """
+    Suggest improvements for an existing SWMS document.
+    
+    Args:
+        document_id: ID of the uploaded SWMS document
+        incident_history: List of recent incidents to consider
+        improvement_focus: Focus area (safety, efficiency, or compliance)
+    
+    Returns:
+        Prioritized improvement recommendations with explanations
+    """
+    return await suggest_swms_improvements(document_id, incident_history, improvement_focus)
+
+@mcp.tool()
+async def extract_hazards_from_image_tool(
+    image_content: str,
+    work_type: str,
+    jurisdiction: str = "nsw"
+) -> Dict[str, Any]:
+    """
+    Extract and identify hazards from a construction site image.
+    
+    Args:
+        image_content: Base64 encoded image content
+        work_type: Type of work being performed
+        jurisdiction: State/territory for specific requirements
+    
+    Returns:
+        List of identified hazards with risk ratings
+    """
+    return await extract_hazards_from_image(image_content, work_type, jurisdiction)
 
 # Remove the if __name__ == "__main__" block for FastMCP Cloud compatibility
 # The server should be run using: fastmcp run server.py

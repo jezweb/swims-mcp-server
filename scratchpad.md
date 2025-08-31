@@ -115,3 +115,46 @@ The prompt is comprehensive and covers:
 - Follow FastMCP Cloud deployment requirements
 - Commit working features incrementally
 - Keep backward compatibility
+
+## New Tools Implementation (2025-01-08)
+
+### Directory Structure
+```
+swims-mcp-server/
+├── server.py (main server, will import from tools)
+├── tools/
+│   ├── __init__.py
+│   ├── generation_tools.py (generate_swms_from_description)
+│   ├── communication_tools.py (generate_toolbox_talk, create_worker_summary)
+│   ├── analysis_tools.py (suggest_swms_improvements, extract_hazards_from_image)
+│   └── utils.py (shared utilities)
+└── prompts/
+    └── swms_prompts.py (prompt templates)
+```
+
+### Tool Specifications
+
+#### 1. generate_swms_from_description
+- Input: job_description, trade_type, site_type, jurisdiction
+- Output: Complete SWMS document ready for review
+- Uses R2 context for regulatory compliance
+
+#### 2. generate_toolbox_talk
+- Input: document_id, duration (5/10/15min), focus_area
+- Output: Bullet points and supervisor notes
+- Extracts key safety points from SWMS
+
+#### 3. create_worker_summary
+- Input: document_id, language_level, include_symbols
+- Output: Simplified safety card format
+- Uses emojis for visual hazard representation
+
+#### 4. suggest_swms_improvements
+- Input: document_id, incident_history, improvement_focus
+- Output: Prioritized recommendations with explanations
+- Analyzes against best practices
+
+#### 5. extract_hazards_from_image
+- Input: image_content (base64), work_type, jurisdiction
+- Output: List of identified hazards with risk ratings
+- Uses Gemini vision capabilities
