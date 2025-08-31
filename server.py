@@ -55,8 +55,7 @@ TEMP_STORAGE_DIR = Path("/tmp/swms-file-uploads")
 TEMP_STORAGE_DIR.mkdir(exist_ok=True)
 FILE_TTL_HOURS = 24  # Files expire after 24 hours
 
-# In-memory storage for uploaded file metadata and Gemini file objects
-uploaded_files: Dict[str, Dict[str, Any]] = {}
+# Note: We use Gemini file IDs directly instead of local storage for better persistence
 
 def cleanup_expired_files():
     """Remove expired files from storage"""
@@ -108,10 +107,7 @@ def save_uploaded_file(file_data: bytes, filename: str) -> tuple[str, str]:
     
     return doc_id, str(file_path), mime_type
 
-def get_uploaded_file(document_id: str) -> Optional[Dict[str, Any]]:
-    """Get uploaded file information by document_id"""
-    cleanup_expired_files()  # Clean up expired files
-    return uploaded_files.get(document_id)
+# Removed get_uploaded_file function - now using Gemini file IDs directly
 
 @mcp.custom_route("/upload", methods=["POST"])
 async def upload_file(request: Request) -> JSONResponse:
@@ -162,26 +158,14 @@ async def upload_file(request: Request) -> JSONResponse:
         try:
             gemini_file = client.files.upload(file=file_path)
             
-            # Store file metadata
-            uploaded_files[doc_id] = {
-                'document_id': doc_id,
-                'filename': filename,
-                'file_path': file_path,
-                'mime_type': mime_type,
-                'upload_time': time.time(),
-                'gemini_file': gemini_file,
-                'file_size': len(file_data)
-            }
-            
             return JSONResponse({
                 "status": "success",
                 "message": "File uploaded successfully",
-                "document_id": doc_id,
+                "document_id": gemini_file.name,  # Return Gemini file ID directly
                 "filename": filename,
                 "mime_type": mime_type,
                 "file_size": len(file_data),
-                "gemini_file_name": gemini_file.name if hasattr(gemini_file, 'name') else 'uploaded',
-                "expires_in_hours": FILE_TTL_HOURS
+                "gemini_file_uri": gemini_file.uri if hasattr(gemini_file, 'uri') else None
             })
             
         except Exception as e:
@@ -543,33 +527,16 @@ async def upload_swms_from_url(url: str) -> Dict[str, Any]:
                 )
             )
             
-            # Generate a local document ID
-            doc_id = str(uuid.uuid4())
-            
-            # Store in uploaded_files dictionary for analysis tools
-            uploaded_files[doc_id] = {
-                'document_id': doc_id,
-                'filename': file_name,
-                'file_path': temp_path,  # Keep temp file for potential re-use
-                'mime_type': mime_type,
-                'file_size': len(file_bytes),
-                'upload_time': time.time(),
-                'gemini_file': uploaded_file,
-                'source_url': url,
-                'upload_method': 'url'
-            }
-            
             response_data = {
                 "status": "success",
                 "message": f"Document {file_name} uploaded successfully from URL",
-                "document_id": doc_id,  # Return our local ID, not Gemini's
+                "document_id": uploaded_file.name,  # Return Gemini's file ID directly
                 "file_info": {
                     "name": uploaded_file.display_name,
                     "mime_type": uploaded_file.mime_type,
                     "uri": uploaded_file.uri,
                     "size_bytes": len(file_bytes),
-                    "source_url": url,
-                    "gemini_file_id": uploaded_file.name  # Include Gemini's ID for reference
+                    "source_url": url
                 }
             }
             
@@ -663,20 +630,13 @@ async def analyze_swms_compliance(
                 "message": "Gemini API key not configured"
             }
         
-        # Get the uploaded file
-        file_info = get_uploaded_file(document_id)
-        if not file_info:
+        # Get the Gemini file object directly
+        try:
+            gemini_file = client.files.get(document_id)
+        except Exception as e:
             return {
                 "status": "error",
-                "message": f"Document not found or expired: {document_id}"
-            }
-        
-        # Get the Gemini file object
-        gemini_file = file_info.get('gemini_file')
-        if not gemini_file:
-            return {
-                "status": "error",
-                "message": f"Gemini file not available for document: {document_id}"
+                "message": f"Document not found or unable to access: {document_id}. Error: {str(e)}"
             }
         
         # Get jurisdiction-specific context if R2 context manager is available
@@ -1033,20 +993,13 @@ async def analyze_swms_custom(
                 "message": "Gemini API key not configured"
             }
         
-        # Get the uploaded file
-        file_info = get_uploaded_file(document_id)
-        if not file_info:
+        # Get the Gemini file object directly
+        try:
+            gemini_file = client.files.get(document_id)
+        except Exception as e:
             return {
                 "status": "error",
-                "message": f"Document not found or expired: {document_id}"
-            }
-        
-        # Get the Gemini file object
-        gemini_file = file_info.get('gemini_file')
-        if not gemini_file:
-            return {
-                "status": "error",
-                "message": f"Gemini file not available for document: {document_id}"
+                "message": f"Document not found or unable to access: {document_id}. Error: {str(e)}"
             }
         
         # Add format instructions based on output_format
@@ -1130,20 +1083,13 @@ async def get_compliance_score(
                 "message": "Gemini API key not configured"
             }
         
-        # Get the uploaded file
-        file_info = get_uploaded_file(document_id)
-        if not file_info:
+        # Get the Gemini file object directly
+        try:
+            gemini_file = client.files.get(document_id)
+        except Exception as e:
             return {
                 "status": "error",
-                "message": f"Document not found or expired: {document_id}"
-            }
-        
-        # Get the Gemini file object
-        gemini_file = file_info.get('gemini_file')
-        if not gemini_file:
-            return {
-                "status": "error",
-                "message": f"Gemini file not available for document: {document_id}"
+                "message": f"Document not found or unable to access: {document_id}. Error: {str(e)}"
             }
         
         # Scoring prompt
@@ -1282,20 +1228,13 @@ async def quick_check_swms(
                 "message": "Gemini API key not configured"
             }
         
-        # Get the uploaded file
-        file_info = get_uploaded_file(document_id)
-        if not file_info:
+        # Get the Gemini file object directly
+        try:
+            gemini_file = client.files.get(document_id)
+        except Exception as e:
             return {
                 "status": "error",
-                "message": f"Document not found or expired: {document_id}"
-            }
-        
-        # Get the Gemini file object
-        gemini_file = file_info.get('gemini_file')
-        if not gemini_file:
-            return {
-                "status": "error",
-                "message": f"Gemini file not available for document: {document_id}"
+                "message": f"Document not found or unable to access: {document_id}. Error: {str(e)}"
             }
         
         # Define check-specific prompts
