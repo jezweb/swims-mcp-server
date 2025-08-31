@@ -4,13 +4,21 @@ A FastMCP server that analyzes Safe Work Method Statements (SWMS) for Australian
 
 ## 🌟 Key Features
 
+### Core Compliance Features
 - **🌏 Multi-jurisdictional Support** - All Australian states and territories (NSW, VIC, QLD, WA, SA, TAS, ACT, NT)
 - **📚 Regulatory Context** - Automatic inclusion of 25+ official documents from Cloudflare R2
 - **📄 Flexible Input** - Base64, URL, text, with automatic DOCX to PDF conversion
 - **✅ Comprehensive Analysis** - Based on WHS/OHS regulations for each jurisdiction
 - **🎯 Custom Analysis** - Flexible prompts and specialized compliance checks
 - **📊 Numerical Scoring** - Weighted compliance scores for tracking improvements
-- **🤖 Gemini 2.5 Flash** - Advanced document understanding with regulatory context
+- **🤖 Gemini 2.0 Flash** - Advanced document understanding with regulatory context
+
+### New Business Operation Features
+- **🚀 SWMS Generation** - Create complete SWMS from plain English job descriptions
+- **🗣️ Toolbox Talks** - Generate 5/10/15 minute safety talks from SWMS
+- **👷 Worker Summaries** - Simplified safety cards with visual symbols
+- **💡 Improvement Suggestions** - AI-powered recommendations based on best practices
+- **📸 Image Hazard Detection** - Identify site hazards from photos using vision AI
 
 ## 🚀 Quick Start
 
@@ -99,8 +107,30 @@ custom = await analyze_swms_custom({
 })
 ```
 
+### Generate SWMS from Description (NEW)
+
+```python
+# Generate complete SWMS from job description
+swms = await generate_swms_from_description_tool({
+    "job_description": "Install electrical wiring and outlets on level 3 of commercial building, including running cables through ceiling cavity and installing GPOs in office spaces",
+    "trade_type": "electrical",
+    "site_type": "commercial",
+    "jurisdiction": "nsw"
+})
+# Returns complete SWMS document ready for review
+
+# Generate toolbox talk from SWMS
+talk = await generate_toolbox_talk_tool({
+    "document_id": document_id,
+    "duration": "5min",
+    "focus_area": "electrical safety"
+})
+# Returns bullet points for morning safety briefing
+```
+
 ## 🔧 Available Tools
 
+### Core Analysis Tools
 | Tool | Description | Key Parameters |
 |------|-------------|---------------|
 | `upload_swms_document` | Upload from base64 content | `file_content`, `file_name` |
@@ -112,6 +142,15 @@ custom = await analyze_swms_custom({
 | `quick_check_swms` | Rapid specific checks | `document_id`, `check_type` |
 | `list_jurisdictions` | Get supported jurisdictions | None |
 | `get_server_status` | Check server health | None |
+
+### Business Operation Tools (NEW)
+| Tool | Description | Key Parameters |
+|------|-------------|---------------|
+| `generate_swms_from_description_tool` | Create SWMS from job description | `job_description`, `trade_type`, `site_type` |
+| `generate_toolbox_talk_tool` | Generate daily safety talks | `document_id`, `duration`, `focus_area` |
+| `create_worker_summary_tool` | Simplified safety cards | `document_id`, `language_level`, `include_symbols` |
+| `suggest_swms_improvements_tool` | AI improvement suggestions | `document_id`, `improvement_focus` |
+| `extract_hazards_from_image_tool` | Vision-based hazard detection | `image_content`, `work_type` |
 
 ## 🏛️ Jurisdiction Support
 
@@ -242,6 +281,7 @@ MIT License - see LICENSE file for details
 - **v1.0.0** - Initial release with multi-jurisdictional support
 - **v1.1.0** - Added R2 integration and regulatory context
 - **v1.2.0** - Custom analysis and scoring features
+- **v2.0.0** - Added 5 business operation tools for SME workflow management
 
 ---
 

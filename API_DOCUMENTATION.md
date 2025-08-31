@@ -6,7 +6,9 @@ The SWMS MCP Server provides AI-powered analysis of Safe Work Method Statements 
 
 ## Available Tools
 
-### 1. `upload_swms_document`
+### Document Management Tools
+
+#### 1. `upload_swms_document`
 Upload a SWMS document from base64-encoded content to Gemini API.
 
 **Parameters:**
@@ -38,7 +40,7 @@ Upload a SWMS document from base64-encoded content to Gemini API.
 }
 ```
 
-### 2. `upload_swms_from_url`
+#### 2. `upload_swms_from_url`
 Upload a SWMS document from a URL to Gemini API.
 
 **Parameters:**
@@ -47,7 +49,9 @@ Upload a SWMS document from a URL to Gemini API.
 **Returns:**
 Same as `upload_swms_document`, with additional `source_url` field.
 
-### 3. `analyze_swms_compliance`
+### Analysis Tools
+
+#### 3. `analyze_swms_compliance`
 Analyze a SWMS document for WHS/OHS compliance using Gemini API with regulatory context.
 
 **Parameters:**
@@ -266,7 +270,7 @@ List all supported jurisdictions with their regulatory details.
 }
 ```
 
-### 9. `get_server_status`
+#### 9. `get_server_status`
 Check server health and configuration status.
 
 **Parameters:** None
@@ -282,6 +286,190 @@ Check server health and configuration status.
   "cached_documents": 5,
   "version": "1.0.0",
   "message": "Server is operational with R2 context support"
+}
+```
+
+### Business Operation Tools (NEW)
+
+#### 10. `generate_swms_from_description_tool`
+Generate a complete SWMS from a job description using AI.
+
+**Parameters:**
+- `job_description` (string, required): Plain English description of the work
+- `trade_type` (string, required): Type of trade (electrical, plumbing, carpentry, scaffolding, demolition, concrete, roofing, excavation)
+- `site_type` (string, optional): Type of site. Default: "commercial"
+  - Options: residential, commercial, industrial, infrastructure, renovation
+- `jurisdiction` (string, optional): State/territory code. Default: "nsw"
+
+**Returns:**
+```json
+{
+  "status": "success",
+  "message": "SWMS generated successfully",
+  "swms_document": "Complete formatted SWMS document text...",
+  "metadata": {
+    "job_description": "Install electrical wiring...",
+    "trade_type": "electrical",
+    "site_type": "commercial",
+    "jurisdiction": "nsw",
+    "terminology": "WHS",
+    "regulatory_context_included": true,
+    "document_stats": {
+      "total_lines": 250,
+      "sections": 10,
+      "approximate_pages": 8
+    }
+  },
+  "next_steps": [
+    "Review and customize for site-specific conditions",
+    "Add company logo and contact details",
+    "Obtain worker signatures before commencing work",
+    "File with principal contractor"
+  ]
+}
+```
+
+#### 11. `generate_toolbox_talk_tool`
+Generate a toolbox talk from a SWMS document.
+
+**Parameters:**
+- `document_id` (string, required): ID of the uploaded SWMS document
+- `duration` (string, optional): Duration of talk. Default: "5min"
+  - Options: "5min", "10min", "15min"
+- `focus_area` (string, optional): Specific area to focus on
+
+**Returns:**
+```json
+{
+  "status": "success",
+  "message": "Toolbox talk generated successfully",
+  "toolbox_talk": {
+    "duration": "5min",
+    "focus_area": "working at heights",
+    "content": "Full toolbox talk text...",
+    "sections": {
+      "Today's Key Risks": "...",
+      "Critical Controls": "...",
+      "PPE Reminder": "...",
+      "Watch Out For": "...",
+      "Emergency Info": "..."
+    }
+  },
+  "delivery_tips": [
+    "Keep it interactive - ask questions",
+    "Use real examples from the site",
+    "Check understanding before starting work",
+    "Document attendance and concerns raised"
+  ]
+}
+```
+
+#### 12. `create_worker_summary_tool`
+Create a simplified worker summary from a SWMS document.
+
+**Parameters:**
+- `document_id` (string, required): ID of the uploaded SWMS document
+- `language_level` (string, optional): Language complexity. Default: "simple"
+  - Options: "simple", "visual", "standard"
+- `include_symbols` (boolean, optional): Include emoji symbols. Default: true
+
+**Returns:**
+```json
+{
+  "status": "success",
+  "message": "Worker summary created successfully",
+  "worker_summary": {
+    "language_level": "simple",
+    "include_symbols": true,
+    "content": "Safety card content with visual symbols...",
+    "format": "safety_card",
+    "metrics": {
+      "total_lines": 20,
+      "bullet_points": 15,
+      "estimated_reading_time": "1-2 minutes"
+    }
+  },
+  "usage_instructions": [
+    "Print on bright colored paper",
+    "Display at site entry",
+    "Review during induction",
+    "Available in multiple languages"
+  ]
+}
+```
+
+#### 13. `suggest_swms_improvements_tool`
+Suggest improvements for an existing SWMS document.
+
+**Parameters:**
+- `document_id` (string, required): ID of the uploaded SWMS document
+- `incident_history` (array, optional): List of recent incidents to consider
+- `improvement_focus` (string, optional): Focus area. Default: "safety"
+  - Options: "safety", "efficiency", "compliance"
+
+**Returns:**
+```json
+{
+  "status": "success",
+  "message": "Improvement suggestions generated successfully",
+  "improvements": {
+    "focus_area": "safety",
+    "total_recommendations": 12,
+    "categories": {
+      "critical_gaps": ["Add emergency assembly point", "..."],
+      "quick_wins": ["Include site-specific hazards", "..."],
+      "best_practices": ["Implement permit system", "..."],
+      "safety_specific": ["Add fatigue management", "..."]
+    },
+    "full_analysis": "Detailed analysis text..."
+  },
+  "implementation_priority": [
+    "1. Address critical gaps immediately",
+    "2. Implement quick wins this week",
+    "3. Plan best practices for next review",
+    "4. Focus on safety improvements ongoing"
+  ]
+}
+```
+
+#### 14. `extract_hazards_from_image_tool`
+Extract and identify hazards from a construction site image.
+
+**Parameters:**
+- `image_content` (string, required): Base64 encoded image content
+- `work_type` (string, required): Type of work being performed
+- `jurisdiction` (string, optional): State/territory code. Default: "nsw"
+
+**Returns:**
+```json
+{
+  "status": "success",
+  "message": "Image analyzed successfully for hazards",
+  "hazard_analysis": {
+    "work_type": "scaffolding",
+    "jurisdiction": "nsw",
+    "total_hazards_identified": 8,
+    "high_risk_count": 3,
+    "hazard_categories": {
+      "immediate_dangers": [
+        {
+          "description": "Missing edge protection at 3m height",
+          "risk_level": "High",
+          "category": "Immediate Dangers"
+        }
+      ],
+      "high_risk_hazards": [...],
+      "general_hazards": [...],
+      "work_specific_hazards": [...]
+    },
+    "full_analysis": "Detailed hazard analysis..."
+  },
+  "recommended_actions": [
+    "Address immediate dangers before work proceeds",
+    "Implement controls for high-risk hazards",
+    "Update SWMS with site-specific hazards",
+    "Brief workers on identified hazards"
+  ]
 }
 ```
 

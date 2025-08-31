@@ -1228,7 +1228,7 @@ async def get_server_status() -> Dict[str, Any]:
     return {
         "status": "active",
         "server_name": "SWMS Analysis Server",
-        "version": "1.0.0",
+        "version": "2.0.0",
         "supported_formats": ["PDF", "DOCX"],
         "gemini_api": {
             "configured": api_configured,
