@@ -66,8 +66,12 @@ async def generate_swms_from_description(
         client = genai.Client(api_key=api_key)
         r2_context = R2ContextManager(client)
         
-        # Get regulatory context
-        context_files = await r2_context.get_context_for_jurisdiction(jurisdiction)
+        # Get regulatory context with error handling
+        try:
+            context_files = await r2_context.get_context_for_jurisdiction(jurisdiction)
+        except Exception as e:
+            print(f"Warning: Could not load regulatory context: {e}")
+            context_files = []
         
         # Format the prompt
         prompt = GENERATE_SWMS_PROMPT.format(
@@ -86,14 +90,10 @@ async def generate_swms_from_description(
         # Generate with Gemini
         contents = []
         
-        # Add regulatory documents as context
-        for file_info in context_files:
-            contents.append(
-                types.Part.from_uri(
-                    file_uri=file_info["uri"],
-                    mime_type=file_info["mime_type"]
-                )
-            )
+        # Add regulatory documents as context (file objects directly)
+        for file_obj in context_files:
+            if file_obj:  # Only add valid file objects
+                contents.append(file_obj)
         
         # Add the prompt
         contents.append(prompt)

@@ -120,8 +120,8 @@ class R2ContextManager:
             print(f"Error fetching {doc_path}: {e}")
             return None
     
-    def upload_to_gemini(self, doc_bytes: bytes, doc_name: str) -> Optional[str]:
-        """Upload document to Gemini Files API and return file ID"""
+    def upload_to_gemini(self, doc_bytes: bytes, doc_name: str) -> Optional[Dict]:
+        """Upload document to Gemini Files API and return file object"""
         try:
             # Save to temp file for upload
             temp_path = self.cache_dir / f"temp_{doc_name}"
@@ -134,14 +134,15 @@ class R2ContextManager:
             # Clean up temp file
             temp_path.unlink(missing_ok=True)
             
-            return uploaded_file.name
+            # Return the full file object
+            return uploaded_file
         except Exception as e:
             print(f"Error uploading {doc_name} to Gemini: {e}")
             return None
     
-    def get_context_files(self, jurisdiction: str = "nsw") -> List[str]:
-        """Get list of Gemini file IDs for jurisdiction context"""
-        file_ids = []
+    def get_context_files(self, jurisdiction: str = "nsw") -> List[Any]:
+        """Get list of Gemini file objects for jurisdiction context"""
+        file_objects = []
         
         # Always include national documents
         docs_to_fetch = REGULATORY_DOCUMENTS.get("national", [])
@@ -154,31 +155,20 @@ class R2ContextManager:
             doc_path = f"{jurisdiction.lower()}/{doc_name}" if jurisdiction.lower() != "national" else f"national/{doc_name}"
             cache_key = self._get_cache_key(doc_path)
             
-            # Check cache
-            cache_entry = self.file_cache.get(cache_key, {})
-            if self._is_cache_valid(cache_entry):
-                file_ids.append(cache_entry["file_id"])
-                continue
+            # Check cache - for now, skip cache to always get fresh file objects
+            # TODO: Cache file objects properly
             
             # Fetch from R2
             doc_bytes = self.fetch_from_r2(doc_path)
             if not doc_bytes:
                 continue
             
-            # Upload to Gemini
-            file_id = self.upload_to_gemini(doc_bytes, doc_name)
-            if file_id:
-                # Update cache
-                self.file_cache[cache_key] = {
-                    "file_id": file_id,
-                    "timestamp": time.time(),
-                    "doc_name": doc_name,
-                    "doc_path": doc_path
-                }
-                self._save_cache()
-                file_ids.append(file_id)
+            # Upload to Gemini and get file object
+            file_obj = self.upload_to_gemini(doc_bytes, doc_name)
+            if file_obj:
+                file_objects.append(file_obj)
         
-        return file_ids
+        return file_objects
     
     def get_jurisdiction_context(self, jurisdiction: str = "nsw") -> Dict[str, Any]:
         """Get jurisdiction-specific context information"""
@@ -246,27 +236,16 @@ class R2ContextManager:
                 "Principal contractor coordination requirements"
             ]
     
-    async def get_context_for_jurisdiction(self, jurisdiction: str = "nsw") -> List[Dict[str, str]]:
+    async def get_context_for_jurisdiction(self, jurisdiction: str = "nsw") -> List[Any]:
         """
-        Get Gemini file context for jurisdiction as formatted file info.
-        Returns list of dicts with 'uri' and 'mime_type' keys for Gemini API.
+        Get Gemini file context for jurisdiction as file objects.
+        Returns list of Gemini file objects ready for use in content generation.
         
         Args:
             jurisdiction: State/territory code (nsw, vic, qld, etc.)
             
         Returns:
-            List of file info dicts with 'uri' and 'mime_type' keys
+            List of Gemini file objects
         """
-        file_infos = []
-        
-        # Get file IDs using existing method
-        file_ids = self.get_context_files(jurisdiction)
-        
-        # Convert file IDs to the expected format
-        for file_id in file_ids:
-            file_infos.append({
-                "uri": file_id,  # Gemini file ID serves as URI
-                "mime_type": "application/pdf"  # All regulatory docs are PDFs
-            })
-        
-        return file_infos
+        # Simply return the file objects from get_context_files
+        return self.get_context_files(jurisdiction)
