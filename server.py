@@ -8,12 +8,17 @@ import json
 import base64
 import tempfile
 import requests
+import uuid
+import time
+import mimetypes
 from pathlib import Path
 from typing import Dict, Any, List, Optional
 from fastmcp import FastMCP
 from dotenv import load_dotenv
 from google import genai
 from google.genai import types
+from starlette.requests import Request
+from starlette.responses import JSONResponse
 
 # Import R2 context manager
 from r2_context import R2ContextManager
@@ -44,6 +49,190 @@ if api_key:
 
 # MUST be at module level for FastMCP Cloud
 mcp = FastMCP("swms-analysis-server")
+
+# Temporary file storage configuration
+TEMP_STORAGE_DIR = Path("/tmp/swms-file-uploads")
+TEMP_STORAGE_DIR.mkdir(exist_ok=True)
+FILE_TTL_HOURS = 24  # Files expire after 24 hours
+
+# In-memory storage for uploaded file metadata and Gemini file objects
+uploaded_files: Dict[str, Dict[str, Any]] = {}
+
+def cleanup_expired_files():
+    """Remove expired files from storage"""
+    current_time = time.time()
+    expired_files = []
+    
+    for doc_id, file_info in uploaded_files.items():
+        if current_time - file_info['upload_time'] > (FILE_TTL_HOURS * 3600):
+            expired_files.append(doc_id)
+            
+            # Remove physical file
+            file_path = file_info.get('file_path')
+            if file_path and Path(file_path).exists():
+                try:
+                    Path(file_path).unlink()
+                except Exception as e:
+                    print(f"Warning: Could not delete expired file {file_path}: {e}")
+    
+    # Remove from memory
+    for doc_id in expired_files:
+        del uploaded_files[doc_id]
+    
+    return len(expired_files)
+
+def save_uploaded_file(file_data: bytes, filename: str) -> tuple[str, str]:
+    """Save uploaded file and return document_id and file_path"""
+    # Clean up expired files first
+    cleanup_expired_files()
+    
+    # Generate unique document ID
+    doc_id = str(uuid.uuid4())
+    
+    # Determine file extension
+    mime_type, _ = mimetypes.guess_type(filename)
+    if filename.lower().endswith('.pdf'):
+        ext = '.pdf'
+        mime_type = 'application/pdf'
+    elif filename.lower().endswith('.docx'):
+        ext = '.docx'
+        mime_type = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+    else:
+        ext = Path(filename).suffix or '.bin'
+        mime_type = mime_type or 'application/octet-stream'
+    
+    # Save file to temporary storage
+    file_path = TEMP_STORAGE_DIR / f"{doc_id}{ext}"
+    with open(file_path, 'wb') as f:
+        f.write(file_data)
+    
+    return doc_id, str(file_path), mime_type
+
+def get_uploaded_file(document_id: str) -> Optional[Dict[str, Any]]:
+    """Get uploaded file information by document_id"""
+    cleanup_expired_files()  # Clean up expired files
+    return uploaded_files.get(document_id)
+
+@mcp.custom_route("/upload", methods=["POST"])
+async def upload_file(request: Request) -> JSONResponse:
+    """
+    HTTP endpoint for uploading SWMS documents.
+    
+    Accepts multipart/form-data with a 'file' field.
+    Returns document_id for use with MCP tools.
+    """
+    try:
+        if not client:
+            return JSONResponse(
+                {"error": "Gemini API not configured", "status": "error"}, 
+                status_code=500
+            )
+        
+        # Parse multipart form data
+        form = await request.form()
+        uploaded_file = form.get("file")
+        
+        if not uploaded_file:
+            return JSONResponse(
+                {"error": "No file provided", "status": "error"}, 
+                status_code=400
+            )
+        
+        # Read file data
+        file_data = await uploaded_file.read()
+        filename = uploaded_file.filename or "document"
+        
+        if len(file_data) == 0:
+            return JSONResponse(
+                {"error": "Empty file", "status": "error"}, 
+                status_code=400
+            )
+        
+        # Check file size (50MB limit)
+        if len(file_data) > 50 * 1024 * 1024:
+            return JSONResponse(
+                {"error": "File too large (max 50MB)", "status": "error"}, 
+                status_code=413
+            )
+        
+        # Save file locally
+        doc_id, file_path, mime_type = save_uploaded_file(file_data, filename)
+        
+        # Upload to Gemini Files API
+        try:
+            gemini_file = client.files.upload(file=file_path)
+            
+            # Store file metadata
+            uploaded_files[doc_id] = {
+                'document_id': doc_id,
+                'filename': filename,
+                'file_path': file_path,
+                'mime_type': mime_type,
+                'upload_time': time.time(),
+                'gemini_file': gemini_file,
+                'file_size': len(file_data)
+            }
+            
+            return JSONResponse({
+                "status": "success",
+                "message": "File uploaded successfully",
+                "document_id": doc_id,
+                "filename": filename,
+                "mime_type": mime_type,
+                "file_size": len(file_data),
+                "gemini_file_name": gemini_file.name if hasattr(gemini_file, 'name') else 'uploaded',
+                "expires_in_hours": FILE_TTL_HOURS
+            })
+            
+        except Exception as e:
+            # Clean up local file if Gemini upload fails
+            try:
+                Path(file_path).unlink(missing_ok=True)
+            except:
+                pass
+            return JSONResponse(
+                {"error": f"Failed to upload to Gemini: {str(e)}", "status": "error"}, 
+                status_code=500
+            )
+    
+    except Exception as e:
+        return JSONResponse(
+            {"error": f"Upload failed: {str(e)}", "status": "error"}, 
+            status_code=500
+        )
+
+@mcp.custom_route("/health", methods=["GET"])
+async def health_check(request: Request) -> JSONResponse:
+    """Health check endpoint"""
+    return JSONResponse({
+        "status": "healthy",
+        "service": "swms-analysis-server",
+        "upload_endpoint": "/upload",
+        "gemini_api_configured": client is not None,
+        "active_uploads": len(uploaded_files),
+        "temp_storage_dir": str(TEMP_STORAGE_DIR)
+    })
+
+@mcp.custom_route("/uploads", methods=["GET"])
+async def list_uploads(request: Request) -> JSONResponse:
+    """List current uploaded files (for debugging)"""
+    cleanup_expired_files()  # Clean up before listing
+    
+    files_info = {}
+    for doc_id, file_info in uploaded_files.items():
+        files_info[doc_id] = {
+            "filename": file_info.get("filename"),
+            "mime_type": file_info.get("mime_type"),
+            "file_size": file_info.get("file_size"),
+            "upload_time": file_info.get("upload_time"),
+            "expires_at": file_info.get("upload_time", 0) + (FILE_TTL_HOURS * 3600)
+        }
+    
+    return JSONResponse({
+        "status": "success",
+        "upload_count": len(files_info),
+        "files": files_info
+    })
 
 def convert_docx_to_pdf(docx_bytes: bytes) -> bytes:
     """
@@ -457,12 +646,19 @@ async def analyze_swms_compliance(
             }
         
         # Get the uploaded file
-        try:
-            uploaded_file = client.files.get(name=document_id)
-        except Exception as e:
+        file_info = get_uploaded_file(document_id)
+        if not file_info:
             return {
                 "status": "error",
-                "message": f"Document not found: {document_id}"
+                "message": f"Document not found or expired: {document_id}"
+            }
+        
+        # Get the Gemini file object
+        gemini_file = file_info.get('gemini_file')
+        if not gemini_file:
+            return {
+                "status": "error",
+                "message": f"Gemini file not available for document: {document_id}"
             }
         
         # Get jurisdiction-specific context if R2 context manager is available
@@ -597,12 +793,7 @@ Analyze the attached SWMS document thoroughly and provide the assessment in the 
                     print(f"Warning: Could not add context file {file_id}: {e}")
         
         # Add the main SWMS document to analyze
-        contents.append(
-            types.Part.from_uri(
-                file_uri=uploaded_file.uri,
-                mime_type=uploaded_file.mime_type
-            )
-        )
+        contents.append(gemini_file)
         
         # Generate analysis using Gemini model
         response = client.models.generate_content(
@@ -825,12 +1016,19 @@ async def analyze_swms_custom(
             }
         
         # Get the uploaded file
-        try:
-            uploaded_file = client.files.get(name=document_id)
-        except Exception as e:
+        file_info = get_uploaded_file(document_id)
+        if not file_info:
             return {
                 "status": "error",
-                "message": f"Document not found: {document_id}"
+                "message": f"Document not found or expired: {document_id}"
+            }
+        
+        # Get the Gemini file object
+        gemini_file = file_info.get('gemini_file')
+        if not gemini_file:
+            return {
+                "status": "error",
+                "message": f"Gemini file not available for document: {document_id}"
             }
         
         # Add format instructions based on output_format
@@ -849,10 +1047,7 @@ async def analyze_swms_custom(
             model='gemini-2.5-flash',
             contents=[
                 full_prompt,
-                types.Part.from_uri(
-                    file_uri=uploaded_file.uri,
-                    mime_type=uploaded_file.mime_type
-                )
+                gemini_file
             ]
         )
         
@@ -918,12 +1113,19 @@ async def get_compliance_score(
             }
         
         # Get the uploaded file
-        try:
-            uploaded_file = client.files.get(name=document_id)
-        except Exception as e:
+        file_info = get_uploaded_file(document_id)
+        if not file_info:
             return {
                 "status": "error",
-                "message": f"Document not found: {document_id}"
+                "message": f"Document not found or expired: {document_id}"
+            }
+        
+        # Get the Gemini file object
+        gemini_file = file_info.get('gemini_file')
+        if not gemini_file:
+            return {
+                "status": "error",
+                "message": f"Gemini file not available for document: {document_id}"
             }
         
         # Scoring prompt
@@ -972,10 +1174,7 @@ Return a JSON object with this exact structure:
             model='gemini-2.5-flash',
             contents=[
                 scoring_prompt,
-                types.Part.from_uri(
-                    file_uri=uploaded_file.uri,
-                    mime_type=uploaded_file.mime_type
-                )
+                gemini_file
             ]
         )
         
@@ -1066,12 +1265,19 @@ async def quick_check_swms(
             }
         
         # Get the uploaded file
-        try:
-            uploaded_file = client.files.get(name=document_id)
-        except Exception as e:
+        file_info = get_uploaded_file(document_id)
+        if not file_info:
             return {
                 "status": "error",
-                "message": f"Document not found: {document_id}"
+                "message": f"Document not found or expired: {document_id}"
+            }
+        
+        # Get the Gemini file object
+        gemini_file = file_info.get('gemini_file')
+        if not gemini_file:
+            return {
+                "status": "error",
+                "message": f"Gemini file not available for document: {document_id}"
             }
         
         # Define check-specific prompts
@@ -1119,10 +1325,7 @@ Return JSON: {"hazards_identified": [list of hazards], "site_specific": true/fal
             model='gemini-2.5-flash',
             contents=[
                 prompt,
-                types.Part.from_uri(
-                    file_uri=uploaded_file.uri,
-                    mime_type=uploaded_file.mime_type
-                )
+                gemini_file
             ]
         )
         

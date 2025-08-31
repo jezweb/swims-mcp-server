@@ -158,3 +158,39 @@ swims-mcp-server/
 - Input: image_content (base64), work_type, jurisdiction
 - Output: List of identified hazards with risk ratings
 - Uses Gemini vision capabilities
+
+## File Upload Solution Implementation (2025-01-31) 🚧 IN PROGRESS
+
+### Problem Identified
+- SWMS MCP server deployed on FastMCP Cloud cannot access local files
+- Need to upload and analyze SWMS documents while preserving structure
+- Gemini's document understanding is key requirement (no text extraction)
+
+### Solution: HTTP File Upload Endpoint + Enhanced MCP Tools
+
+#### Architecture
+1. **HTTP Upload Endpoint**: Custom route `/upload` for multipart/form-data
+2. **Temporary Storage**: Container-local file storage with TTL cleanup
+3. **Gemini Integration**: Immediate upload to Gemini Files API for document understanding
+4. **Enhanced MCP Tools**: Use document_id from uploads instead of local file paths
+
+#### Implementation Plan
+- [x] Research FastMCP custom route capabilities
+- [x] Design file upload and storage architecture  
+- [ ] Add HTTP file upload endpoint to server.py
+- [ ] Implement temporary file storage system
+- [ ] Enhance existing MCP tools to work with document IDs
+- [ ] Add file cleanup and management
+- [ ] Test complete upload and analysis flow
+
+#### Usage Flow
+1. POST file to `https://server.fastmcp.app/upload`
+2. Get `document_id` from response
+3. Use MCP tools with `document_id` parameter
+4. Get full compliance analysis with document structure preserved
+
+#### Benefits
+- Preserves document structure for Gemini's document understanding
+- Works with remote FastMCP Cloud deployment  
+- Maintains existing MCP tool interface
+- Enables analysis of local files without text extraction
