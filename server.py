@@ -543,16 +543,33 @@ async def upload_swms_from_url(url: str) -> Dict[str, Any]:
                 )
             )
             
+            # Generate a local document ID
+            doc_id = str(uuid.uuid4())
+            
+            # Store in uploaded_files dictionary for analysis tools
+            uploaded_files[doc_id] = {
+                'document_id': doc_id,
+                'filename': file_name,
+                'file_path': temp_path,  # Keep temp file for potential re-use
+                'mime_type': mime_type,
+                'file_size': len(file_bytes),
+                'upload_time': time.time(),
+                'gemini_file': uploaded_file,
+                'source_url': url,
+                'upload_method': 'url'
+            }
+            
             response_data = {
                 "status": "success",
                 "message": f"Document {file_name} uploaded successfully from URL",
-                "document_id": uploaded_file.name,
+                "document_id": doc_id,  # Return our local ID, not Gemini's
                 "file_info": {
                     "name": uploaded_file.display_name,
                     "mime_type": uploaded_file.mime_type,
                     "uri": uploaded_file.uri,
                     "size_bytes": len(file_bytes),
-                    "source_url": url
+                    "source_url": url,
+                    "gemini_file_id": uploaded_file.name  # Include Gemini's ID for reference
                 }
             }
             
@@ -566,8 +583,9 @@ async def upload_swms_from_url(url: str) -> Dict[str, Any]:
             
             return response_data
         finally:
-            # Clean up temporary file
-            os.unlink(temp_path)
+            # Don't delete temp file - it's stored in uploaded_files for potential re-use
+            # It will be cleaned up by cleanup_expired_files() after TTL
+            pass
             
     except Exception as e:
         return {
