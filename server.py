@@ -1745,7 +1745,6 @@ async def create_worker_summary_tool(
 @mcp.tool()
 async def suggest_swms_improvements_tool(
     document_id: str,
-    incident_history: Optional[str] = None,
     improvement_focus: str = "safety"
 ) -> Dict[str, Any]:
     """
@@ -1753,15 +1752,10 @@ async def suggest_swms_improvements_tool(
     
     Prerequisites: Document must be uploaded first using upload_swms_from_url or similar.
     
-    Analyzes SWMS against best practices and incident history to suggest enhancements.
+    Analyzes SWMS against best practices to suggest enhancements.
     
     Args:
         document_id: Gemini file ID from upload tools (format: "files/abc123...")
-        
-        incident_history: Optional list of recent incidents/near-misses to address.
-                         Provide as semicolon-separated string.
-                         Format: "incident1;incident2;incident3"
-                         Example: "Near miss with falling tools;Worker slipped on wet surface;Electric shock from damaged cord"
                          
         improvement_focus: Area to prioritize for improvements. Must be one of:
                           "safety" - Focus on hazard controls and risk reduction (default)
@@ -1777,10 +1771,9 @@ async def suggest_swms_improvements_tool(
         - implementation_priority: Suggested order of implementation
         
     Example usage:
-        # After an incident
+        # Safety-focused review
         improvements = suggest_swms_improvements_tool(
             document_id="files/abc123",
-            incident_history="Near miss: Worker almost fell from ladder;Tool dropped from height",
             improvement_focus="safety"
         )
         
@@ -1789,13 +1782,11 @@ async def suggest_swms_improvements_tool(
             document_id="files/abc123",
             improvement_focus="compliance"
         )
+        
+    Note: To incorporate incident history in the analysis, use analyze_swms_custom with 
+    a prompt like: "Suggest improvements considering these recent incidents: [list incidents]"
     """
-    # Parse incident_history from semicolon-separated string to list
-    incidents_list = None
-    if incident_history:
-        incidents_list = [incident.strip() for incident in incident_history.split(';') if incident.strip()]
-    
-    return await suggest_swms_improvements(document_id, incidents_list, improvement_focus)
+    return await suggest_swms_improvements(document_id, None, improvement_focus)
 
 @mcp.tool()
 async def extract_hazards_from_image_tool(
