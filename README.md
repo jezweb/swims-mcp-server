@@ -128,6 +128,68 @@ talk = await generate_toolbox_talk_tool({
 # Returns bullet points for morning safety briefing
 ```
 
+## 🤖 AI Integration Guide
+
+### For AI Assistants Using This MCP Server
+
+This section helps AI assistants understand how to effectively use the SWMS MCP Server tools.
+
+#### Understanding the Workflow
+
+1. **Always Upload First**: Before any analysis, documents must be uploaded using one of:
+   - `upload_swms_from_url` (recommended - works with any public URL)
+   - `upload_swms_document` (for base64-encoded content)
+   - `upload_swms_from_file` (for local files - only works if server has access)
+
+2. **Use the Returned document_id**: Upload tools return a `document_id` (format: "files/abc123..."). This ID is required for all analysis tools.
+
+3. **Choose the Right Tool**:
+   - **Full compliance check**: Use `analyze_swms_compliance` for comprehensive assessment
+   - **Quick validation**: Use `quick_check_swms` for specific aspects (hrcw, ppe, emergency, etc.)
+   - **Numerical score**: Use `get_compliance_score` for benchmarking
+   - **Create new SWMS**: Use `generate_swms_from_description_tool` (no upload needed)
+   - **Daily briefings**: Use `generate_toolbox_talk_tool` after uploading
+
+#### Common Patterns
+
+```python
+# Pattern 1: Full Analysis Pipeline
+upload = upload_swms_from_url(url="https://example.com/swms.pdf")
+doc_id = upload["document_id"]
+score = get_compliance_score(doc_id, jurisdiction="nsw")
+if score["overall_score"] < 85:
+    report = analyze_swms_compliance(doc_id, jurisdiction="nsw")
+    improvements = suggest_swms_improvements_tool(doc_id)
+
+# Pattern 2: Morning Safety Briefing
+upload = upload_swms_from_url(url="https://company.com/todays-swms.pdf")
+talk = generate_toolbox_talk_tool(upload["document_id"], duration="5min")
+summary = create_worker_summary_tool(upload["document_id"], language_level="simple")
+
+# Pattern 3: Create New SWMS
+swms = generate_swms_from_description_tool(
+    job_description="Detailed description of work",
+    trade_type="electrical",  # Must be from valid list
+    site_type="commercial",   # Must be from valid list
+    jurisdiction="nsw"         # Must be valid state code
+)
+```
+
+#### Parameter Validation
+
+- **jurisdiction**: Must be one of: "nsw", "vic", "qld", "wa", "sa", "tas", "act", "nt", "national"
+- **duration**: Must be exactly: "5min", "10min", or "15min"
+- **check_type**: Must be one of: "hrcw", "ppe", "emergency", "signatures", "hierarchy", "hazards"
+- **trade_type**: See tool description for complete list (electrical, plumbing, carpentry, etc.)
+- **site_type**: See tool description for complete list (residential, commercial, industrial, etc.)
+
+#### Error Handling
+
+Common errors and solutions:
+- "Document not found" - Ensure you're using the correct document_id from upload
+- "Invalid jurisdiction" - Use lowercase state codes (nsw, not NSW)
+- "Invalid duration" - Must be exactly "5min", "10min", or "15min"
+
 ## 🔧 Available Tools
 
 ### Core Analysis Tools

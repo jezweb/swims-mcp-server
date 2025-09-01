@@ -324,13 +324,26 @@ async def upload_swms_document(
     """
     Upload a SWMS document from base64-encoded content to Gemini API.
     
+    This is the first step in the SWMS analysis workflow. The returned document_id
+    must be used with analysis tools like analyze_swms_compliance or generate_toolbox_talk_tool.
+    
     Args:
-        file_content: Base64-encoded file content
-        file_name: Name of the file (e.g., "safety_plan.pdf")
-        mime_type: Optional MIME type (auto-detected if not provided)
+        file_content: Base64-encoded file content (use base64.b64encode(file_bytes).decode('utf-8'))
+        file_name: Name of the file (e.g., "safety_plan.pdf" or "swms_doc.docx")
+        mime_type: Optional MIME type. If not provided, auto-detected from file_name.
+                   Supported: "application/pdf", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
         
     Returns:
-        Dictionary with upload status and document ID
+        Dictionary with:
+        - status: "success" or "error"
+        - document_id: Gemini file ID (format: "files/abc123...") - use this with analysis tools
+        - file_info: Details about the uploaded file
+        - conversion_info: Present if DOCX was converted to PDF
+        
+    Example workflow:
+        1. Encode file: content = base64.b64encode(open('swms.pdf', 'rb').read()).decode('utf-8')
+        2. Upload: result = upload_swms_document(file_content=content, file_name="swms.pdf")
+        3. Analyze: analysis = analyze_swms_compliance(document_id=result["document_id"])
     """
     try:
         if not client:
@@ -437,11 +450,33 @@ async def upload_swms_from_url(url: str) -> Dict[str, Any]:
     """
     Upload a SWMS document from a URL to Gemini API.
     
+    Recommended method for uploading documents. Supports any publicly accessible URL including
+    cloud storage (R2, S3, Google Drive, Dropbox) and direct HTTP/HTTPS links.
+    
     Args:
-        url: URL of the SWMS document (PDF or DOCX)
+        url: Full URL to the SWMS document. Must be publicly accessible or have valid auth.
+             Supported formats: PDF (.pdf) or Word (.docx)
+             Examples:
+             - "https://storage.example.com/swms/document.pdf"
+             - "https://pub-abc123.r2.dev/safety-plan.docx"
+             - "https://drive.google.com/file/d/abc123/view?usp=sharing"
         
     Returns:
-        Dictionary with upload status and document ID
+        Dictionary with:
+        - status: "success" or "error"
+        - document_id: Gemini file ID (format: "files/abc123...") - use this with analysis tools
+        - file_info: Details including source_url, size_bytes, mime_type
+        - conversion_info: Present if DOCX was converted to PDF
+        
+    Example workflow:
+        1. Upload: result = upload_swms_from_url(url="https://example.com/swms.pdf")
+        2. Check compliance: score = get_compliance_score(document_id=result["document_id"])
+        3. Generate talk: talk = generate_toolbox_talk_tool(document_id=result["document_id"])
+    
+    Error cases:
+        - Returns error if URL is not accessible (404, 403, etc.)
+        - Returns error if file format is not supported
+        - Returns error if file is too large (>50MB)
     """
     try:
         if not client:
@@ -565,11 +600,33 @@ async def upload_swms_from_file(file_path: str) -> Dict[str, Any]:
     """
     Upload a SWMS document from a local file path.
     
+    Note: This only works when the MCP server has access to the local filesystem.
+    For remote servers, use upload_swms_from_url instead.
+    
     Args:
-        file_path: Path to the local SWMS file (PDF or DOCX)
+        file_path: Absolute or relative path to the SWMS file
+                   Supported formats: PDF (.pdf) or Word (.docx)
+                   Examples:
+                   - "/home/user/documents/swms.pdf"
+                   - "./safety-plans/working-at-heights.docx"
+                   - "C:\\Documents\\SWMS\\electrical-work.pdf"
         
     Returns:
-        Dictionary with upload status and document ID
+        Dictionary with:
+        - status: "success" or "error"
+        - document_id: Gemini file ID (format: "files/abc123...") - use this with analysis tools
+        - file_info: Details including source_path, size_bytes, mime_type
+        - conversion_info: Present if DOCX was converted to PDF
+        
+    Example workflow:
+        1. Upload: result = upload_swms_from_file(file_path="/path/to/swms.pdf")
+        2. Quick check: hrcw = quick_check_swms(document_id=result["document_id"], check_type="hrcw")
+        3. Full analysis: report = analyze_swms_compliance(document_id=result["document_id"])
+    
+    Error cases:
+        - Returns error if file does not exist
+        - Returns error if file format is not supported
+        - Returns error if no read permissions
     """
     try:
         # Check if file exists
@@ -616,12 +673,37 @@ async def analyze_swms_compliance(
     """
     Analyze a SWMS document for WHS compliance using Gemini API.
     
+    Prerequisites: Document must be uploaded first using one of:
+    - upload_swms_from_url (recommended)
+    - upload_swms_document
+    - upload_swms_from_file
+    
     Args:
-        document_id: ID of the uploaded SWMS document
-        jurisdiction: State/territory jurisdiction (nsw, vic, qld, wa, sa, tas, act, nt, national)
+        document_id: Gemini file ID from upload tools (format: "files/abc123...")
+                     This is returned as 'document_id' from any upload tool
+        jurisdiction: Australian state/territory code for compliance checking
+                      Options: "nsw", "vic", "qld", "wa", "sa", "tas", "act", "nt", "national"
+                      Default: "nsw"
+                      Note: "vic" uses OHS terminology, others use WHS
         
     Returns:
-        Detailed compliance assessment report
+        Comprehensive compliance report with:
+        - project_details: Extracted project information
+        - overall_assessment: "Compliant", "Partially Compliant", or "Non-Compliant"
+        - summary: High-level compliance summary
+        - detailed_analysis: Six key areas (document_control, hrcw_identification, 
+                            hazard_identification, control_measures, monitoring_review, consultation)
+        - urgent_actions: Critical items to address before work begins
+        - recommendations: Suggested improvements
+        
+    Example workflow:
+        1. Upload: upload_result = upload_swms_from_url(url="https://example.com/swms.pdf")
+        2. Analyze: report = analyze_swms_compliance(
+                        document_id=upload_result["document_id"],
+                        jurisdiction="nsw"
+                    )
+        3. Check status: if report["overall_assessment"] == "Non-Compliant":
+                            review_urgent_actions(report["urgent_actions"])
     """
     try:
         if not client:
@@ -1069,12 +1151,43 @@ async def get_compliance_score(
     """
     Calculate numerical compliance scores for a SWMS document.
     
+    Prerequisites: Document must be uploaded first using upload_swms_from_url or similar.
+    
+    Provides quantitative assessment useful for tracking improvements and benchmarking.
+    
     Args:
-        document_id: ID of the uploaded SWMS document
-        weighted: If True, weight scores by importance (HRCW and controls weighted higher)
+        document_id: Gemini file ID from upload tools (format: "files/abc123...")
+        jurisdiction: State/territory code ("nsw", "vic", "qld", "wa", "sa", "tas", "act", "nt", "national")
+                      Default: "nsw"
+        weighted: If True, applies importance weighting:
+                  - HRCW identification: 25%
+                  - Control measures: 25%
+                  - Hazard identification: 20%
+                  - Document control: 10%
+                  - Monitoring/Review: 10%
+                  - Consultation: 10%
+                  If False, all areas weighted equally (16.67% each)
+                  Default: True
         
     Returns:
-        Compliance scores for each area and overall score
+        Score report with:
+        - overall_score: 0-100 percentage score
+        - weighted: Whether weighting was applied
+        - area_scores: Individual scores and justifications for each compliance area
+        - weights_used: The weightings applied (if weighted=True)
+        - compliance_level: "Fully Compliant" (85+), "Partially Compliant" (60-84), "Non-Compliant" (<60)
+        
+    Example usage:
+        score = get_compliance_score(
+            document_id="files/abc123",
+            jurisdiction="nsw",
+            weighted=True
+        )
+        if score["overall_score"] < 60:
+            print(f"Non-compliant: {score['overall_score']}%")
+            for area, details in score["area_scores"].items():
+                if details["score"] < 50:
+                    print(f"Critical area: {area} - {details['justification']}")
     """
     try:
         if not client:
@@ -1208,18 +1321,35 @@ async def quick_check_swms(
     """
     Perform a quick focused check on specific aspects of a SWMS document.
     
+    Prerequisites: Document must be uploaded first using upload_swms_from_url or similar.
+    
+    Faster than full compliance analysis - use this for quick validations or specific concerns.
+    
     Args:
-        document_id: ID of the uploaded SWMS document
-        check_type: Type of check to perform. Options:
-                   - 'hrcw': Check for High-Risk Construction Work identification
-                   - 'ppe': Check PPE requirements
-                   - 'emergency': Check emergency procedures
-                   - 'signatures': Check for sign-off sections
-                   - 'hierarchy': Check hierarchy of controls
-                   - 'hazards': Quick hazard identification check
+        document_id: Gemini file ID from upload tools (format: "files/abc123...")
+        check_type: Specific aspect to check. Must be one of:
+                   - "hrcw": High-Risk Construction Work identification per Schedule 1
+                   - "ppe": Personal Protective Equipment requirements and specifications
+                   - "emergency": Emergency procedures and contact information
+                   - "signatures": Worker consultation and sign-off sections
+                   - "hierarchy": Hierarchy of controls implementation (Elimination→PPE)
+                   - "hazards": Quick scan of identified hazards and risk ratings
         
     Returns:
-        Quick check results focused on the specific aspect
+        Focused results with:
+        - status: "success" or "error"
+        - check_type: The type of check performed
+        - result: Specific findings for the check type
+        - quick_summary: Brief summary of findings
+        
+    Example usage:
+        # Check if HRCW is properly identified
+        hrcw_check = quick_check_swms(
+            document_id="files/abc123",
+            check_type="hrcw"
+        )
+        if not hrcw_check["result"]["properly_identified"]:
+            alert_supervisor(hrcw_check["result"]["missing"])
     """
     try:
         if not client:
@@ -1482,25 +1612,59 @@ async def generate_swms_from_description_tool(
     """
     Generate a complete SWMS from a job description using AI.
     
+    Creates a comprehensive, compliant SWMS document from a plain English description.
+    No prerequisites - this creates a new document from scratch.
+    
     Args:
-        job_description: Plain English description of the work to be performed
-        trade_type: Type of trade - examples: electrical, plumbing, carpentry, 
-                   roofing, scaffolding, demolition, concrete, painting, hvac, 
-                   glazing, steel_erection, excavation
-        site_type: Type of site (default: commercial) - options: residential, 
-                  commercial, industrial, infrastructure, mining, healthcare, 
-                  educational, retail
-        jurisdiction: Australian state/territory code (default: nsw) - options: 
-                     nsw, vic, qld, wa, sa, tas, act, nt, national
+        job_description: Plain English description of the work to be performed.
+                        Be specific about tasks, location, and any special conditions.
+                        Examples:
+                        - "Installing new power outlets and lighting in a two-story office building"
+                        - "Demolishing internal walls on level 3 of hospital building"
+                        - "Roof repairs on residential property including gutter replacement"
+                        
+        trade_type: Type of trade performing the work. Must be one of:
+                   "electrical", "plumbing", "carpentry", "roofing", "scaffolding",
+                   "demolition", "concrete", "painting", "hvac", "glazing",
+                   "steel_erection", "excavation", "asbestos_removal", "crane_operation",
+                   "welding", "insulation", "fire_protection", "landscaping"
+                   
+        site_type: Type of construction site. Must be one of:
+                  "residential" - Houses, apartments, townhouses
+                  "commercial" - Offices, shops, restaurants (default)
+                  "industrial" - Factories, warehouses, processing plants
+                  "infrastructure" - Roads, bridges, utilities
+                  "mining" - Mine sites and related facilities
+                  "healthcare" - Hospitals, clinics, aged care
+                  "educational" - Schools, universities, training centers
+                  "retail" - Shopping centers, stores
+                  
+        jurisdiction: Australian state/territory code for compliance requirements:
+                     "nsw" - New South Wales (default)
+                     "vic" - Victoria (uses OHS instead of WHS)
+                     "qld" - Queensland
+                     "wa" - Western Australia
+                     "sa" - South Australia
+                     "tas" - Tasmania
+                     "act" - Australian Capital Territory
+                     "nt" - Northern Territory
+                     "national" - Federal/Model WHS laws
     
     Returns:
-        Complete SWMS document ready for review with metadata and next steps
-    
-    Example:
-        job_description: "Installing new power outlets in office building second floor"
-        trade_type: "electrical"
-        site_type: "commercial"
-        jurisdiction: "nsw"
+        Generated SWMS with:
+        - swms_document: Complete formatted SWMS text (can be saved as .txt or .md)
+        - metadata: Document statistics and configuration used
+        - next_steps: List of actions to complete the SWMS (add signatures, customize, etc.)
+        
+    Example workflow:
+        1. Generate: result = generate_swms_from_description_tool(
+                        job_description="Installing solar panels on factory roof",
+                        trade_type="electrical",
+                        site_type="industrial",
+                        jurisdiction="qld"
+                    )
+        2. Save: save_to_file(result["swms_document"], "solar_installation_swms.md")
+        3. Review: follow_steps(result["next_steps"])
     """
     return await generate_swms_from_description(job_description, trade_type, site_type, jurisdiction)
 
@@ -1513,13 +1677,49 @@ async def generate_toolbox_talk_tool(
     """
     Generate a toolbox talk from a SWMS document.
     
+    Prerequisites: Document must be uploaded first using upload_swms_from_url or similar.
+    
+    Creates structured safety briefing materials for pre-start meetings and daily toolbox talks.
+    
     Args:
-        document_id: ID of the uploaded SWMS document
-        duration: Duration of talk (5min, 10min, or 15min)
-        focus_area: Specific area to focus on (optional)
+        document_id: Gemini file ID from upload tools (format: "files/abc123...")
+        
+        duration: Length of the toolbox talk. Must be exactly one of:
+                 "5min" - Quick daily briefing with key points
+                 "10min" - Standard morning talk with discussion
+                 "15min" - Detailed briefing for new tasks or Monday talks
+                 
+        focus_area: Optional specific safety topic to emphasize. Examples:
+                   - "electrical safety" - Focus on electrical hazards and controls
+                   - "working at heights" - Emphasize fall prevention
+                   - "manual handling" - Focus on lifting and ergonomics
+                   - "ppe compliance" - Reinforce PPE requirements
+                   - "emergency procedures" - Review emergency response
+                   - "hazard identification" - Focus on spotting new hazards
+                   - None/null - General safety briefing covering all aspects
     
     Returns:
-        Bullet points and talking notes for supervisors
+        Structured toolbox talk with:
+        - duration: The requested duration
+        - focus_area: The topic emphasized
+        - content: Complete formatted talk script
+        - sections: Breakdown of talk into numbered sections
+        - delivery_tips: Suggestions for effective delivery
+        
+    Example usage:
+        # Monday comprehensive briefing
+        monday_talk = generate_toolbox_talk_tool(
+            document_id="files/abc123",
+            duration="15min",
+            focus_area="hazard identification"
+        )
+        
+        # Quick daily electrical safety reminder
+        daily_talk = generate_toolbox_talk_tool(
+            document_id="files/abc123",
+            duration="5min",
+            focus_area="electrical safety"
+        )
     """
     return await generate_toolbox_talk(document_id, duration, focus_area)
 
@@ -1551,14 +1751,50 @@ async def suggest_swms_improvements_tool(
     """
     Suggest improvements for an existing SWMS document.
     
+    Prerequisites: Document must be uploaded first using upload_swms_from_url or similar.
+    
+    Analyzes SWMS against best practices and incident history to suggest enhancements.
+    
     Args:
-        document_id: ID of the uploaded SWMS document
-        incident_history: Optional list of recent incidents to consider 
-                         (e.g., ["Near miss with falling tools", "Slip on wet surface"])
-        improvement_focus: Focus area (default: safety) - options: safety, efficiency, compliance
+        document_id: Gemini file ID from upload tools (format: "files/abc123...")
+        
+        incident_history: Optional list of recent incidents/near-misses to address.
+                         Each item should be a brief description.
+                         Examples:
+                         ["Near miss with falling tools from scaffold",
+                          "Worker slipped on wet surface near entry",
+                          "Minor electric shock from damaged cord",
+                          "Back strain from manual lifting"]
+                         
+        improvement_focus: Area to prioritize for improvements. Must be one of:
+                          "safety" - Focus on hazard controls and risk reduction (default)
+                          "efficiency" - Streamline procedures without compromising safety
+                          "compliance" - Ensure regulatory requirements are exceeded
     
     Returns:
-        Prioritized improvement recommendations with explanations
+        Categorized improvements with:
+        - critical_gaps: Must-fix compliance or safety issues
+        - quick_wins: Easy improvements with high impact
+        - best_practices: Recommendations to exceed standards
+        - focus_specific: Improvements for the chosen focus area
+        - implementation_priority: Suggested order of implementation
+        
+    Example usage:
+        # After an incident
+        improvements = suggest_swms_improvements_tool(
+            document_id="files/abc123",
+            incident_history=[
+                "Near miss: Worker almost fell from ladder",
+                "Tool dropped from height"
+            ],
+            improvement_focus="safety"
+        )
+        
+        # Routine review for compliance
+        review = suggest_swms_improvements_tool(
+            document_id="files/abc123",
+            improvement_focus="compliance"
+        )
     """
     return await suggest_swms_improvements(document_id, incident_history, improvement_focus)
 

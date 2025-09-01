@@ -4,6 +4,65 @@
 
 The SWMS MCP Server provides AI-powered analysis of Safe Work Method Statements for Australian construction compliance. It uses Gemini AI with jurisdiction-specific regulatory context from Cloudflare R2 storage.
 
+## Quick Start - Common Workflows
+
+### Workflow 1: Analyze Existing SWMS Document
+```python
+# Step 1: Upload document from URL
+upload_result = await upload_swms_from_url(
+    url="https://storage.example.com/swms/electrical-work.pdf"
+)
+document_id = upload_result["document_id"]  # e.g., "files/abc123..."
+
+# Step 2: Get compliance score
+score = await get_compliance_score(
+    document_id=document_id,
+    jurisdiction="nsw",
+    weighted=True
+)
+print(f"Compliance: {score['overall_score']}% - {score['compliance_level']}")
+
+# Step 3: Generate toolbox talk for morning briefing
+talk = await generate_toolbox_talk_tool(
+    document_id=document_id,
+    duration="5min",
+    focus_area="electrical safety"
+)
+```
+
+### Workflow 2: Create New SWMS from Description
+```python
+# Generate complete SWMS document
+result = await generate_swms_from_description_tool(
+    job_description="Installing solar panels on warehouse roof with connection to main switchboard",
+    trade_type="electrical",
+    site_type="industrial",
+    jurisdiction="qld"
+)
+
+# Save the generated document
+with open("solar_installation_swms.md", "w") as f:
+    f.write(result["swms_document"])
+```
+
+### Workflow 3: Quick Safety Checks
+```python
+# Upload document
+upload = await upload_swms_from_url(url="https://example.com/swms.pdf")
+doc_id = upload["document_id"]
+
+# Run multiple quick checks
+checks = {
+    "hrcw": await quick_check_swms(doc_id, "hrcw"),
+    "ppe": await quick_check_swms(doc_id, "ppe"),
+    "emergency": await quick_check_swms(doc_id, "emergency")
+}
+
+# Review critical findings
+for check_type, result in checks.items():
+    print(f"{check_type}: {result['quick_summary']}")
+```
+
 ## Available Tools
 
 ### Document Management Tools
