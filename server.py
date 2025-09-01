@@ -706,49 +706,49 @@ You are an AI assistant with expertise in {jurisdiction_upper} Work Health and S
 
 Return a JSON object with this exact structure:
 
-{
+{{
   "status": "success",
-  "project_details": {
+  "project_details": {{
     "project_name": "[extracted or 'Not specified']",
     "principal_contractor": "[extracted or 'Not specified']",
     "subcontractor": "[extracted or 'Not specified']",
     "swms_title": "[extracted or 'Not specified']"
-  },
+  }},
   "overall_assessment": "Compliant|Partially Compliant|Non-Compliant",
   "summary": "[Brief high-level summary of compliance status]",
-  "detailed_analysis": {
-    "document_control": {
+  "detailed_analysis": {{
+    "document_control": {{
       "status": "Compliant|Partially Compliant|Non-Compliant",
       "comments": "[Specific findings and recommendations]"
-    },
-    "hrcw_identification": {
+    }},
+    "hrcw_identification": {{
       "status": "Compliant|Partially Compliant|Non-Compliant",
       "comments": "[Specific findings and recommendations]"
-    },
-    "hazard_identification": {
+    }},
+    "hazard_identification": {{
       "status": "Compliant|Partially Compliant|Non-Compliant",
       "comments": "[Specific findings and recommendations]"
-    },
-    "control_measures": {
+    }},
+    "control_measures": {{
       "status": "Compliant|Partially Compliant|Non-Compliant",
       "comments": "[Specific findings and recommendations]"
-    },
-    "monitoring_review": {
+    }},
+    "monitoring_review": {{
       "status": "Compliant|Partially Compliant|Non-Compliant",
       "comments": "[Specific findings and recommendations]"
-    },
-    "consultation": {
+    }},
+    "consultation": {{
       "status": "Compliant|Partially Compliant|Non-Compliant",
       "comments": "[Specific findings and recommendations]"
-    }
-  },
+    }}
+  }},
   "urgent_actions": [
     "[List critical non-compliances that must be addressed before work commences]"
   ],
   "recommendations": [
     "[List other improvements for full compliance]"
   ]
-}
+}}
 
 Analyze the attached SWMS document thoroughly and provide the assessment in the exact JSON format above.
 """
@@ -879,49 +879,49 @@ You are an AI assistant with expertise in NSW Work Health and Safety (WHS) legis
 
 Return a JSON object with this exact structure:
 
-{
+{{
   "status": "success",
-  "project_details": {
+  "project_details": {{
     "project_name": "[extracted or 'Not specified']",
     "principal_contractor": "[extracted or 'Not specified']",
     "subcontractor": "[extracted or 'Not specified']",
     "swms_title": "[extracted or 'Not specified']"
-  },
+  }},
   "overall_assessment": "Compliant|Partially Compliant|Non-Compliant",
   "summary": "[Brief high-level summary of compliance status]",
-  "detailed_analysis": {
-    "document_control": {
+  "detailed_analysis": {{
+    "document_control": {{
       "status": "Compliant|Partially Compliant|Non-Compliant",
       "comments": "[Specific findings and recommendations]"
-    },
-    "hrcw_identification": {
+    }},
+    "hrcw_identification": {{
       "status": "Compliant|Partially Compliant|Non-Compliant",
       "comments": "[Specific findings and recommendations]"
-    },
-    "hazard_identification": {
+    }},
+    "hazard_identification": {{
       "status": "Compliant|Partially Compliant|Non-Compliant",
       "comments": "[Specific findings and recommendations]"
-    },
-    "control_measures": {
+    }},
+    "control_measures": {{
       "status": "Compliant|Partially Compliant|Non-Compliant",
       "comments": "[Specific findings and recommendations]"
-    },
-    "monitoring_review": {
+    }},
+    "monitoring_review": {{
       "status": "Compliant|Partially Compliant|Non-Compliant",
       "comments": "[Specific findings and recommendations]"
-    },
-    "consultation": {
+    }},
+    "consultation": {{
       "status": "Compliant|Partially Compliant|Non-Compliant",
       "comments": "[Specific findings and recommendations]"
-    }
-  },
+    }}
+  }},
   "urgent_actions": [
     "[List critical non-compliances that must be addressed before work commences]"
   ],
   "recommendations": [
     "[List other improvements for full compliance]"
   ]
-}
+}}
 
 Analyze the attached SWMS document text thoroughly and provide the assessment in the exact JSON format above.
 
@@ -1105,27 +1105,27 @@ Score each area based on:
 Return a JSON object with this exact structure:
 {
   "scores": {
-    "document_control": {
+    "document_control": {{
       "score": [0-100],
       "justification": "[Brief reason for score]"
-    },
-    "hrcw_identification": {
+    }},
+    "hrcw_identification": {{
       "score": [0-100],
       "justification": "[Brief reason for score]"
-    },
-    "hazard_identification": {
+    }},
+    "hazard_identification": {{
       "score": [0-100],
       "justification": "[Brief reason for score]"
-    },
-    "control_measures": {
+    }},
+    "control_measures": {{
       "score": [0-100],
       "justification": "[Brief reason for score]"
-    },
-    "monitoring_review": {
+    }},
+    "monitoring_review": {{
       "score": [0-100],
       "justification": "[Brief reason for score]"
-    },
-    "consultation": {
+    }},
+    "consultation": {{
       "score": [0-100],
       "justification": "[Brief reason for score]"
     }

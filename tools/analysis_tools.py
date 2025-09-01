@@ -63,11 +63,18 @@ async def suggest_swms_improvements(
             incident_context=incident_context
         )
         
+        # Get the Gemini file object to get the proper URI
+        try:
+            gemini_file = client.files.get(name=document_id)
+            file_uri = gemini_file.uri
+        except Exception as e:
+            return format_error(f"Document not found: {document_id}. Error: {str(e)}", "DOCUMENT_NOT_FOUND")
+        
         # Generate with Gemini
         contents = [
             types.Part.from_uri(
-                file_uri=document_id,
-                mime_type="application/pdf"
+                file_uri=file_uri,
+                mime_type=gemini_file.mime_type or "application/pdf"
             ),
             prompt
         ]
